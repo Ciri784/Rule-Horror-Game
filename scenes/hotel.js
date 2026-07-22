@@ -259,6 +259,7 @@ export const hotel = {
   initialHotelView: "guest",
   initialLocation: "room-704",
   initialTime: 23 * 60,  // 夜裡十一點 — 跟 openingNarrative 對齊
+  initialTime: 23 * 60,  // 夜裡十一點 — 跟 openingNarrative 對齊
   rules: RULES,
   rulebooks: RULEBOOKS,
   hotelJudges: HOTEL_JUDGES,
