@@ -19,7 +19,6 @@ const ITEMS = {
   "guest-card":   { label: "旅客房卡" },
   "staff-card":   { label: "夜班員工證" },
   "room-key-704": { label: "704 號房鑰匙" },
-  "master-key":   { label: "萬能鑰匙" },
   "staff-manual":  { label: "員工手冊",   reveals: ["r4", "r5"] },
   "shift-note":    { label: "夜班守則單", reveals: ["r6"] },
   "floor-4-note":  { label: "4 樓註記",   reveals: ["r7", "r8"] },
@@ -27,22 +26,39 @@ const ITEMS = {
 
 // 守則 — 8 條固定寫死、applies 動態過濾
 const RULES = {
+  // 旅客守則 — 只有在玩家被飯店當成旅客時(且還沒撿到員工證)才生效
   r1: { subject: "旅客", text: "12 點後請勿離開房間。",
-        applies: (s) => s.heldItems.includes("guest-card") && s.location === "room-704" },
+        applies: (s) => s.heldItems.includes("guest-card")
+                     && !s.heldItems.includes("staff-card")
+                     && s.location === "room-704"
+                     && (s.time >= 19 * 60 || s.time < 6 * 60) },
   r2: { subject: "旅客", text: "聽到敲門聲請勿回應。",
-        applies: (s) => s.location === "room-704" },
+        applies: (s) => s.heldItems.includes("guest-card")
+                     && !s.heldItems.includes("staff-card")
+                     && s.location === "room-704" },
   r3: { subject: "旅客", text: "房卡請隨身攜帶。",
-        applies: (s) => s.heldItems.includes("guest-card") },
+        applies: (s) => s.heldItems.includes("guest-card")
+                     && !s.heldItems.includes("staff-card") },
+  // 員工守則 — 只有在玩家被飯店當成員工時才生效
   r4: { subject: "員工", text: "5 點前完成 4 樓房間巡邏。",
-        applies: (s) => s.heldItems.includes("staff-card") && s.hotelView === "staff" && s.location === "staff-corridor" },
+        applies: (s) => s.heldItems.includes("staff-card")
+                     && s.hotelView === "staff"
+                     && s.location === "staff-corridor" },
   r5: { subject: "員工", text: "員工證請於 22:00 前繳回。",
-        applies: (s) => s.heldItems.includes("staff-card") && s.time >= 22 * 60 },
+        applies: (s) => s.heldItems.includes("staff-card")
+                     && s.hotelView === "staff"
+                     && s.time >= 18 * 60 && s.time < 22 * 60 },
   r6: { subject: "員工", text: "監控室僅限值班員工進入。",
-        applies: (s) => s.location === "monitor-room" },
+        applies: (s) => s.heldItems.includes("staff-card")
+                     && (s.hotelView === "staff" || s.hotelView === "intruder") },
+  // 4 樓守則 — 持 room-key-704 的人才看得到
   r7: { subject: "4 樓", text: "4 樓不存在。",
-        applies: (s) => s.heldItems.includes("room-key-704") },
+        applies: (s) => s.heldItems.includes("room-key-704")
+                     && s.location === "room-704" },
   r8: { subject: "4 樓", text: "凌晨 3 點到 4 點請保持清醒。",
-        applies: (s) => s.location === "room-704" && s.time >= 3 * 60 && s.time < 4 * 60 },
+        applies: (s) => s.heldItems.includes("room-key-704")
+                     && s.location === "room-704"
+                     && s.time >= 3 * 60 && s.time < 4 * 60 },
 };
 
 // 飯店判斷準則 — 按順序評估、第一個 when 通過的 view 勝出
@@ -57,20 +73,7 @@ const HOTEL_JUDGES = [
 // 探索動作 — 6 個地點純按鈕
 function actions(state, ctx) {
   const at = (id) => state.location === id;
-  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
-  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
-  ctx.scene = ctx.scene || hotel;
-  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
-  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
-  ctx.scene = ctx.scene || hotel;
-  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
-  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
-  ctx.scene = ctx.scene || hotel;
   // 讓 pickUp/moveTo 找得到中文 label、unlockRule 找得到 scene
-  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
-  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
-  ctx.scene = ctx.scene || hotel;
-  // 讓 pickUp/moveTo 找得到中文 label
   ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
   ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
   ctx.scene = ctx.scene || hotel;
@@ -79,6 +82,8 @@ function actions(state, ctx) {
              hint: "門外是走廊。",
              onChoose: (s, c) => {
                if (at("room-704")) { c.narrate("門是鎖著的。門縫透著走廊的光。"); s.time += 3; }
+               else if (at("staff-corridor")) { c.narrate("員工通道的金屬門、刷員工證才能過。"); s.time += 2; }
+               else if (at("monitor-room")) { c.narrate("監控室的門半掩。裡面沒人。"); s.time += 2; }
                else { c.narrate("門緊閉。"); s.time += 2; }
              }});
   out.push({ id: "watch-tv", label: "看電視",
@@ -122,6 +127,8 @@ function actions(state, ctx) {
                  c.narrate("窗外是停車場。但你沒看過 4 樓以下的窗。");
                  if (!s.unlockedRuleIds.includes("r7")) unlockRule("r7", s, ctx);
                  if (!s.unlockedRuleIds.includes("r8")) unlockRule("r8", s, ctx);
+               } else if (at("lobby")) {
+                 c.narrate("落地窗外是停車場。一台車都沒有。");
                } else { c.narrate("窗外的城市不認識。"); }
                s.time += 3;
              }});
@@ -148,7 +155,7 @@ const ENDINGS = [
   { id: "claimed-by-clerk", text: "夜班櫃台員工站在你身後。你不記得是怎麼離開房間的。",
     when: (s) => s.hotelView === "intruder" && s.time >= 22 * 60 },
   { id: "room-consumed", text: "房間認得你。你也認得房間。",
-    when: (s) => s.heldItems.includes("room-key-704") && s.time >= 3 * 60 && s.location === "room-704" && s.hotelView !== "guest" },
+    when: (s) => s.heldItems.includes("room-key-704") && s.time >= 3 * 60 && s.location === "room-704" && (s.hotelView === "intruder" || s.hotelView === "unknown") },
 ];
 
 export const hotel = {
