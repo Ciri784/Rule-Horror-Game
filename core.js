@@ -14,24 +14,21 @@
 //   onChoose may call ctx.narrate(text, kind?) to push a narration entry
 //   into the current state's narrative stream.
 
-const STORAGE_PREFIX = "rule-horror:";
-const $app = document.getElementById("app");
+import {
+  loadState, saveState, clearState,
+  narrate, evaluateTriggers, checkEndings, formatTime,
+} from "./engine.js";
 
-function loadState(id) {
-  try { const r = localStorage.getItem(STORAGE_PREFIX + id); return r ? JSON.parse(r) : null; }
-  catch { return null; }
-}
-function saveState(id, s) {
-  try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(s)); } catch {}
-}
-function clearState(id) {
-  try { localStorage.removeItem(STORAGE_PREFIX + id); } catch {}
-}
-
-function narrate(state, text, kind) {
-  state.narrative.push({ time: state.time, kind: kind || "narration", text });
-}
 const scenes = {};
+
+// $app is only meaningful in a browser. Resolve lazily so this module is
+// importable under Node (e.g. by tests) without a real document.
+let $app = null;
+function appRoot() {
+  if ($app) return $app;
+  $app = document.getElementById("app");
+  return $app;
+}
 export function registerScene(scene) { scenes[scene.id] = scene; }
 export function getScene(id) { return scenes[id]; }
 export function listScenes() { return Object.values(scenes); }
@@ -68,46 +65,11 @@ function renderRules(state) {
   return ol;
 }
 
-function evaluateTriggers(scene, state, ctx) {
-  const added = [];
-  for (const t of scene.triggers) {
-    if (state.fired[t.id]) continue;
-    if (!t.when(state, ctx)) continue;
-    state.fired[t.id] = true;
-    if (t.mode === "amend" && typeof t.target === "number") {
-      const target = state.rules[t.target];
-      if (target) {
-        target.amended = true;
-        target.text = t.body;
-        narrate(state, `守則第 ${t.target + 1} 條被悄悄修訂。`, "rule-amended");
-      }
-    } else {
-      const pos = Math.max(1, Math.floor(Math.random() * state.rules.length));
-      state.rules.splice(pos, 0, { text: t.body, inserted: true });
-      narrate(state, `守則多了一條——第 ${pos + 1} 條：「${t.body}」`, "rule-added");
-    }
-    added.push(t);
-  }
-  return added;
-}
-
-function checkEndings(scene, state, ctx) {
-  for (const e of scene.endings) {
-    if (state.ended === e.id) return e;
-    if (e.when(state, ctx)) {
-      state.ended = e.id;
-      narrate(state, e.text, "ending");
-      return e;
-    }
-  }
-  return null;
-}
-
 export function renderScene(sceneId) {
   const scene = scenes[sceneId];
   if (!scene) {
-    $app.innerHTML = "";
-    $app.appendChild(el("div", { class: "scene-card" }, [
+    appRoot().innerHTML = "";
+    appRoot().appendChild(el("div", { class: "scene-card" }, [
       el("h1", {}, "找不到這個場所。"),
       el("p", {}, "請從首頁重新選擇。"),
     ]));
@@ -153,7 +115,7 @@ export function renderScene(sceneId) {
   const ctx = { visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
 
   function rerender() {
-    $app.innerHTML = "";
+    appRoot().innerHTML = "";
 
     // 規則欄 (left on desktop, top on mobile)
     const rulesCol = el("aside", { class: "col col-rules" });
@@ -221,7 +183,7 @@ export function renderScene(sceneId) {
       `場所版本 · ${state.visitCount}`));
 
     const grid = el("div", { class: "scene-grid" }, [rulesCol, narrCol, actCol]);
-    $app.appendChild(grid);
+    appRoot().appendChild(grid);
 
     // scroll narrative to bottom after render
     const stream = document.getElementById("narrative-stream");
@@ -232,14 +194,8 @@ export function renderScene(sceneId) {
   rerender();
 }
 
-function formatTime(mins) {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
 function renderError(err, actionId) {
-  $app.innerHTML = "";
+  appRoot().innerHTML = "";
   const card = el("div", { class: "scene-card" });
   card.appendChild(el("h1", {}, "守則出差錯了"));
   card.appendChild(el("p", { class: "scene-intro" },
@@ -253,7 +209,7 @@ function renderError(err, actionId) {
     class: "restart",
     onclick: (ev) => { ev.preventDefault(); location.hash = ""; location.reload(); },
   }, "返回首頁"));
-  $app.appendChild(card);
+  appRoot().appendChild(card);
 }
 
 function renderNarrativeStream(state) {
@@ -270,7 +226,7 @@ function renderNarrativeStream(state) {
   }
 }
 export function renderIndex() {
-  $app.innerHTML = "";
+  appRoot().innerHTML = "";
   const card = el("div", { class: "scene-card" });
   card.appendChild(el("h1", {}, "規則怪談集"));
   card.appendChild(el("p", { class: "scene-intro" },
@@ -286,7 +242,7 @@ export function renderIndex() {
   }
   card.appendChild(pick);
   card.appendChild(el("div", { class: "meta" }, "Rule Horror · Ciri784"));
-  $app.appendChild(card);
+  appRoot().appendChild(card);
 }
 
 export function start() {
