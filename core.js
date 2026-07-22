@@ -169,55 +169,7 @@ export function renderScene(sceneId) {
     appRoot().appendChild(grid);
     renderNarrativeStream(streamEl, state);
 
-    // 行動欄 (right on desktop, bottom on mobile)
-    const actCol = el("aside", { class: "col col-actions" });
-    actCol.appendChild(el("h2", { class: "col-title" }, "您可以"));
-    actCol.appendChild(el("div", { class: "clock" }, formatTime(state.time)));
 
-    const ending = state.ended ? scene.endings.find((e) => e.id === state.ended) : null;
-    if (ending) {
-      actCol.appendChild(el("div", { class: "scene-end" }, [
-        el("div", { class: "stamp" }, ending.label),
-        el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); restart(); } },
-          el("button", { class: "restart" }, "重新入住")),
-      ]));
-    } else {
-      const actions = scene.actions(state, ctx);
-      if (actions && actions.length) {
-        const wrap = el("div", { class: "actions" });
-        for (const a of actions) {
-          wrap.appendChild(el("button", {
-            type: "button",
-            class: "action-btn",
-            "data-action": a.id,
-            onclick: (ev) => {
-              ev.preventDefault();
-              if (state.ended) return;
-              try {
-                if (!state.actions || typeof state.actions !== "object") {
-                  state.actions = {};
-                }
-                a.onChoose(state, ctx);
-                evaluateTriggers(scene, state, ctx);
-                checkEndings(scene, state, ctx);
-                saveState(sceneId, state);
-              } catch (err) {
-                console.error("[rule-horror] action failed", a.id, err);
-                renderError(err, a.id);
-                return;
-              }
-              rerender();
-              // type out the newest narrative line
-              const stream = document.getElementById("narrative-stream");
-              if (stream) stream.lastElementChild && stream.lastElementChild.classList.add("just-typed");
-            },
-          }, a.label));
-        }
-        actCol.appendChild(wrap);
-      }
-    }
-    actCol.appendChild(el("div", { class: "meta" },
-      `場所版本 · ${state.visitCount}`));
 
     // grid is appended in the narrative-column block above so the
     // narrator can run immediately. Just scroll the stream to the
