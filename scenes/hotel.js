@@ -19,120 +19,103 @@ const ITEMS = {
   "guest-card":   { label: "旅客房卡" },
   "staff-card":   { label: "夜班員工證" },
   "room-key-704": { label: "704 號房鑰匙" },
-  "staff-manual":  { label: "員工手冊",   reveals: ["r4", "r5"] },
-  "shift-note":    { label: "夜班守則單", reveals: ["r6"] },
+  "staff-manual":  { label: "員工守則",   reveals: ["r4", "r5"] },
+  "shift-note":    { label: "夜班守則",   reveals: ["r6"] },
   "floor-4-note":  { label: "4 樓註記",   reveals: ["r7", "r8"] },
 };
 
 // 守則 — 8 條固定寫死、applies 動態過濾
-// 守則單 — 一份守則單 = 一個下拉欄、玩家可同時持有好幾份
-// 持有 = 持對應道具 (旅客守則單例外:持房卡就有)
+// 守則 — 拿到的都並存、不會因身份轉換消失 (rule horror 核心:多身份守則 + 互相矛盾 + 玩家自己記得)
 const RULEBOOKS = {
-  "旅客守則單":  { heldBy: ["guest-card"],  autoFromItem: "guest-card" },
-  "員工手冊":    { heldBy: ["staff-manual"] },
-  "夜班守則單":  { heldBy: ["shift-note"] },
+  "旅客守則":    { heldBy: ["guest-card"],  autoFromItem: "guest-card" },
+  "員工守則":    { heldBy: ["staff-manual"] },
+  "夜班守則":    { heldBy: ["shift-note"] },
   "4 樓註記":    { heldBy: ["floor-4-note"] },
 };
 
 const RULES = {
-  // 旅客守則單 — 持房卡就有
-  r1: { subject: "旅客", book: "旅客守則單",
+  // 旅客守則 — 持房卡就有
+  r1: { subject: "旅客", book: "旅客守則",
         text: "12 點後請勿離開房間。",
         applies: (s) => s.heldItems.includes("guest-card")
-                     && !s.heldItems.includes("staff-card")
                      && s.location === "room-704"
                      && (s.time >= 19 * 60 || s.time < 6 * 60) },
-  r2: { subject: "旅客", book: "旅客守則單",
+  r2: { subject: "旅客", book: "旅客守則",
         text: "聽到敲門聲請勿回應。",
         applies: (s) => s.heldItems.includes("guest-card")
-                     && !s.heldItems.includes("staff-card")
                      && s.location === "room-704" },
-  r3: { subject: "旅客", book: "旅客守則單",
+  r3: { subject: "旅客", book: "旅客守則",
         text: "房卡請隨身攜帶。",
-        applies: (s) => s.heldItems.includes("guest-card")
-                     && !s.heldItems.includes("staff-card") },
-  // 員工手冊 — 撿到 staff-manual 解鎖
-  r4: { subject: "員工", book: "員工手冊",
+        applies: (s) => s.heldItems.includes("guest-card") },
+  // 員工守則 — 撿到 staff-manual 解鎖
+  r4: { subject: "員工", book: "員工守則",
         text: "5 點前完成 4 樓房間巡邏。",
         applies: (s) => s.heldItems.includes("staff-manual")
                      && s.heldItems.includes("staff-card")
-                     && s.hotelView === "staff"
                      && s.location === "staff-corridor" },
-  r5: { subject: "員工", book: "員工手冊",
+  r5: { subject: "員工", book: "員工守則",
         text: "員工證請於 22:00 前繳回。",
         applies: (s) => s.heldItems.includes("staff-manual")
                      && s.heldItems.includes("staff-card")
-                     && s.hotelView === "staff"
                      && s.time >= 18 * 60 && s.time < 22 * 60 },
-  // 夜班守則單 — 撿到 shift-note 解鎖
-  r6: { subject: "員工", book: "夜班守則單",
+  // 夜班守則 — 撿到 shift-note 解鎖
+  r6: { subject: "員工", book: "夜班守則",
         text: "監控室僅限值班員工進入。",
         applies: (s) => s.heldItems.includes("shift-note")
-                     && (s.hotelView === "staff" || s.hotelView === "intruder") },
+                     && s.location === "monitor-room" },
   // 4 樓註記 — 撿到 floor-4-note 解鎖
   r7: { subject: "4 樓", book: "4 樓註記",
         text: "4 樓不存在。",
-        applies: (s) => s.heldItems.includes("floor-4-note")
-                     && s.location === "room-704" },
+        applies: (s) => s.heldItems.includes("floor-4-note") },
   r8: { subject: "4 樓", book: "4 樓註記",
         text: "凌晨 3 點到 4 點請保持清醒。",
         applies: (s) => s.heldItems.includes("floor-4-note")
-                     && s.location === "room-704"
                      && s.time >= 3 * 60 && s.time < 4 * 60 },
   r18: { subject: "4 樓", book: "4 樓註記",
         text: "4F 的房間號碼是 7XX 開頭。但 X 會換。",
-        applies: (s) => s.heldItems.includes("floor-4-note")
-                     && s.location === "room-704" },
+        applies: (s) => s.heldItems.includes("floor-4-note") },
   r19: { subject: "4 樓", book: "4 樓註記",
         text: "凌晨 3 點以後、不要打開房門。",
         applies: (s) => s.heldItems.includes("floor-4-note")
-                     && s.location === "room-704"
                      && s.time >= 3 * 60 },
   r20: { subject: "4 樓", book: "4 樓註記",
         text: "4F 沒有員工。4F 沒有監控。4F 沒有登記簿。",
         applies: (s) => s.heldItems.includes("floor-4-note") },
-  // 旅客守則單 — 開局解鎖
-  r9: { subject: "旅客", book: "旅客守則單",
+  // 旅客守則 — 開局解鎖
+  r9: { subject: "旅客", book: "旅客守則",
         text: "房間裡的時鐘不一定準。",
-        applies: (s) => s.heldItems.includes("guest-card")
-                     && !s.heldItems.includes("staff-card")
-                     && s.location === "room-704" },
-  r10: { subject: "旅客", book: "旅客守則單",
+        applies: (s) => s.heldItems.includes("guest-card") },
+  r10: { subject: "旅客", book: "旅客守則",
         text: "不要試圖從窗戶確認自己在幾樓。",
-        applies: (s) => s.heldItems.includes("guest-card")
-                     && !s.heldItems.includes("staff-card")
-                     && s.location === "room-704" },
-  // 員工手冊 — 撿到 staff-manual 解鎖
-  r11: { subject: "員工", book: "員工手冊",
+        applies: (s) => s.heldItems.includes("guest-card") },
+  // 員工守則 — 撿到 staff-manual 解鎖
+  r11: { subject: "員工", book: "員工守則",
         text: "巡邏時不可搭電梯。",
         applies: (s) => s.heldItems.includes("staff-manual")
-                     && s.heldItems.includes("staff-card")
-                     && s.hotelView === "staff" },
-  r12: { subject: "員工", book: "員工手冊",
+                     && s.heldItems.includes("staff-card") },
+  r12: { subject: "員工", book: "員工守則",
         text: "4F 巡邏完必須搭 3F 樓梯下來。",
         applies: (s) => s.heldItems.includes("staff-manual")
                      && s.heldItems.includes("staff-card")
-                     && s.hotelView === "staff"
                      && s.location === "staff-corridor" },
-  r13: { subject: "員工", book: "員工手冊",
+  r13: { subject: "員工", book: "員工守則",
         text: "遇到旅客時不要直視他的眼睛。",
         applies: (s) => s.heldItems.includes("staff-manual")
-                     && s.heldItems.includes("staff-card")
-                     && s.hotelView === "staff" },
-  // 夜班守則單 — 撿到 shift-note 解鎖
-  r14: { subject: "員工", book: "夜班守則單",
+                     && s.heldItems.includes("staff-card") },
+  // 夜班守則 — 撿到 shift-note 解鎖
+  r14: { subject: "員工", book: "夜班守則",
         text: "02:00 必須關閉所有大廳燈。",
         applies: (s) => s.heldItems.includes("shift-note")
                      && s.location === "lobby"
                      && s.time >= 2 * 60 && s.time < 3 * 60 },
-  r15: { subject: "員工", book: "夜班守則單",
+  r15: { subject: "員工", book: "夜班守則",
         text: "電梯不會停在 4F。如果停了、報修。",
         applies: (s) => s.heldItems.includes("shift-note") },
-  r16: { subject: "員工", book: "夜班守則單",
+  r16: { subject: "員工", book: "夜班守則",
         text: "監視器每隔 15 分鐘會黑屏 3 秒。屬正常現象。",
         applies: (s) => s.heldItems.includes("shift-note")
                      && s.location === "monitor-room" },
-  r17: { subject: "員工", book: "夜班守則單",
+  r17: { subject: "員工", book: "夜班守則",
         text: "員工證若在 22:00 後未繳回、飯店會自己來收。",
         applies: (s) => s.heldItems.includes("shift-note")
                      && s.heldItems.includes("staff-card")
@@ -177,13 +160,13 @@ function actions(state, ctx) {
              onChoose: (s, c) => {
                if (!s.heldItems.includes("staff-card")) {
                  pickUp("staff-card", s, c);
-                 c.narrate("枕頭旁邊還壓著一本員工手冊。");
+                 c.narrate("枕頭旁邊還壓著一本員工守則。");
                  if (!s.heldItems.includes("staff-manual")) pickUp("staff-manual", s, c);
                } else if (!s.heldItems.includes("staff-manual")) {
-                 c.narrate("枕頭旁邊還壓著一本員工手冊。");
+                 c.narrate("枕頭旁邊還壓著一本員工守則。");
                  pickUp("staff-manual", s, c);
                } else { c.narrate("枕頭下什麼都沒有。"); }
-               // 撿到員工手冊 = 員工手冊守則單解鎖 (r4, r5, r11, r12, r13)
+               // 撿到員工守則 = 員工守則解鎖 (r4, r5, r11, r12, r13)
                if (s.heldItems.includes("staff-manual")) {
                  ["r4", "r5", "r11", "r12", "r13"].forEach((id) => {
                    if (!s.unlockedRuleIds.includes(id)) unlockRule(id, s, c);
@@ -226,10 +209,10 @@ function actions(state, ctx) {
              hint: "牆上寫了什麼？",
              onChoose: (s, c) => {
                if (at("room-704")) {
-                 c.narrate("牆角有抓痕。新鮮的。牆上貼著飯店的旅客守則單。");
+                 c.narrate("牆角有抓痕。新鮮的。牆上貼著飯店的旅客守則。");
                  if (!s.unlockedRuleIds.includes("r1")) unlockRule("r1", s, ctx);
                } else if (at("staff-corridor")) {
-                 c.narrate("牆上貼著一張夜班守則單。");
+                 c.narrate("牆上貼著一張夜班守則。");
                  if (!s.heldItems.includes("shift-note")) pickUp("shift-note", s, c);
                  else if (!s.unlockedRuleIds.includes("r6")) unlockRule("r6", s, ctx);
                } else { c.narrate("牆上沒有任何東西。"); }
