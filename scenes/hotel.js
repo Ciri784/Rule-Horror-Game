@@ -163,6 +163,23 @@ export const hotelScene = {
       }
     }
 
+    // 「開門」是 commit 動作，獨立成一個 action：先試鑰匙轉不動，玩家
+    // 自己決定要不要再轉一次把門打開。這樣 left 結局需要的是真的
+    // 「打開」這個 beat，而不是被時間到 22:00 自動收掉。
+    if (state.actions.tryLeave && !state.actions.doorOpened) {
+      opts.push({
+        id: "open-the-door",
+        label: "再轉一次，把門打開。",
+        hint: "您知道鎖是不該開的。您還是轉了。",
+        onChoose(s, c) {
+          s.actions.doorOpened = true;
+          s.time = after(5);
+          c.narrate("您再轉一次。這次鎖響了一下。");
+          c.narrate("門開了。");
+        },
+      });
+    }
+
     return opts;
   },
 
@@ -174,7 +191,7 @@ export const hotelScene = {
     },
     {
       id: "key-outside",
-      when: (s) => !!s.actions.tryLeave,
+      when: (s) => !!s.actions.doorOpened,
       body: "若您打開門時，鑰匙已在門外，請記得：本房間只認領一位旅客。",
     },
     {
@@ -214,7 +231,10 @@ export const hotelScene = {
     },
     {
       id: "checkout-passed",
-      when: (s) => s.time >= 10 * 60,
+      // Only after we've actually crossed midnight. `time` is minutes-of-day
+      // and 21:00 (= 1260) is already numerically > 600 (= 10:00), which
+      // made the original condition fire on the first action.
+      when: (s) => s.crossedMidnight && s.time >= 10 * 60,
       body: "若您錯過退房時間，請向櫃檯索取新的退房時間。新的時間與舊的時間是同一個時間。",
     },
     {
@@ -230,7 +250,7 @@ export const hotelScene = {
     {
       id: "left",
       label: "離開",
-      when: (s) => !!s.actions.tryLeave && s.time >= 22 * 60 && !s.actions.callFrontDesk,
+      when: (s) => !!s.actions.doorOpened && s.time >= 22 * 60 && !s.actions.callFrontDesk,
       text: "您推開門。門外沒有走廊。\n\n您手裡握著那把鑰匙，鑰匙上沒有房號。\n\n您身後沒有建築物。您往前走了三步，停了下來。\n\n您不知道自己是從哪裡出來的。",
     },
     {
