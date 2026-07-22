@@ -1,0 +1,159 @@
+/* Rule Horror — visual style */
+
+:root {
+  --ink: #1a1814;
+  --ink-soft: #4a443c;
+  --ink-faint: #8a8074;
+  --paper: #efe7d6;
+  --paper-edge: #d8cdb6;
+  --accent: #6e1f1f;
+  --accent-soft: #a14a3a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #1f1c17;
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Source Han Serif TC", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  font-size: 17px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(0,0,0,0.4), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(0,0,0,0.5), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 64px 32px 96px;
+}
+
+.scene-card {
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 12px 40px rgba(0,0,0,0.6);
+  padding: 48px 40px;
+  position: relative;
+}
+
+.scene-card::before {
+  content: "";
+  position: absolute;
+  top: 16px; left: 16px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--paper-edge);
+}
+
+h1, h2, h3 { font-weight: 600; letter-spacing: 0.02em; margin: 0 0 0.6em; }
+h1 { font-size: 28px; text-align: center; border-bottom: 1px solid var(--ink-soft); padding-bottom: 16px; margin-bottom: 32px; }
+h2 { font-size: 20px; margin-top: 32px; }
+
+.scene-intro { color: var(--ink-soft); font-size: 15px; margin-bottom: 28px; border-left: 2px solid var(--paper-edge); padding-left: 14px; }
+
+ol.rules { list-style: none; counter-reset: rule; padding: 0; margin: 0; }
+ol.rules > li {
+  counter-increment: rule;
+  position: relative;
+  padding: 14px 0 14px 56px;
+  border-bottom: 1px dashed rgba(74,68,60,0.25);
+  min-height: 32px;
+}
+ol.rules > li:last-child { border-bottom: none; }
+ol.rules > li::before {
+  content: "第 " counter(rule) " 條";
+  position: absolute; left: 0; top: 14px;
+  font-size: 12px; letter-spacing: 0.15em; color: var(--ink-faint);
+  font-family: "Courier New", monospace;
+  width: 48px; text-align: right;
+}
+
+li.inserted { animation: insert 1.4s ease-out; }
+@keyframes insert {
+  0% { background: rgba(110,31,31,0.18); color: var(--accent); transform: translateX(-4px); }
+  60% { background: rgba(110,31,31,0.08); color: var(--ink); transform: translateX(0); }
+  100% { background: transparent; color: var(--ink); }
+}
+
+li.amended::after {
+  content: "（此條已修訂）";
+  display: block; margin-top: 6px;
+  font-size: 12px; color: var(--accent-soft); font-style: italic;
+}
+
+.actions { margin-top: 40px; display: flex; flex-direction: column; gap: 10px; }
+.actions button {
+  font: inherit;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink-soft);
+  padding: 12px 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.actions button:hover, .actions button:focus {
+  background: var(--ink); color: var(--paper); outline: none;
+}
+.actions button::before { content: "▸ "; color: var(--ink-faint); margin-right: 4px; }
+.actions button:hover::before, .actions button:focus::before { color: var(--paper); }
+
+.scene-pick { display: grid; gap: 16px; margin-top: 24px; }
+.scene-pick a {
+  display: block;
+  background: var(--paper); color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--paper-edge);
+  padding: 20px 24px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.scene-pick a:hover, .scene-pick a:focus {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  outline: none;
+}
+.scene-pick a .name { font-size: 18px; font-weight: 600; display: block; margin-bottom: 4px; }
+.scene-pick a .blurb { font-size: 14px; color: var(--ink-soft); }
+
+.meta { margin-top: 48px; font-size: 12px; color: var(--ink-faint); text-align: center; letter-spacing: 0.1em; }
+
+.scene-end { text-align: center; padding: 32px 0; color: var(--ink-soft); }
+.scene-end .stamp {
+  display: inline-block;
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  padding: 6px 14px;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  margin-top: 16px;
+  font-family: "Courier New", monospace;
+  transform: rotate(-3deg);
+}
+
+button.restart {
+  margin-top: 32px;
+  background: transparent;
+  border: 1px dashed var(--ink-faint);
+  color: var(--ink-soft);
+  padding: 10px 18px;
+  font: inherit;
+  cursor: pointer;
+}
+button.restart:hover { border-style: solid; color: var(--ink); }
