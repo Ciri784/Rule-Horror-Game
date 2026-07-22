@@ -30,16 +30,19 @@ describe("new applies-based system", () => {
   it("freshState seeds heldItems, hotelView, location, unlockedRuleIds", () => {
     const { state } = boot();
     expect(state.heldItems).toEqual(["guest-card"]);
-    expect(state.hotelView).toBe("unknown");
+    expect(state.hotelView).toBe("guest");
     expect(state.location).toBe("room-704");
-    expect(state.unlockedRuleIds).toEqual([]);
+    expect(state.unlockedRuleIds).toEqual(["r1", "r2", "r3"]);
   });
   it("rulesFor returns only rules that are unlocked AND pass applies()", () => {
     const { state } = boot();
-    expect(rulesFor(hotel, state)).toHaveLength(0);
-    unlockRule("r1", state, hotel);
-    expect(rulesFor(hotel, state)).toHaveLength(1);
+    // Stage B with default scene: r1, r2, r3 are pre-unlocked
+    // (旅客卡 + 已在 room-704 + 旅館視角) all pass applies() at boot.
+    expect(rulesFor(hotel, state)).toHaveLength(3);
+    unlockRule("r4", state, hotel);  // r4 需 staff-card,不該進入
+    expect(rulesFor(hotel, state)).toHaveLength(3);
     state.location = "lobby";
+    state.heldItems = [];  // 離開旅館、繳回房卡
     expect(rulesFor(hotel, state)).toHaveLength(0);
   });
   it("pickUp adds item, narrates, and triggers hotelView recompute", () => {
