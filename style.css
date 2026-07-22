@@ -69,27 +69,30 @@ h2 { font-size: 20px; margin-top: 32px; }
 .scene-intro { color: var(--ink-soft); font-size: 15px; margin-bottom: 28px; border-left: 2px solid var(--paper-edge); padding-left: 14px; }
 
 ol.rules { list-style: none; counter-reset: rule; padding: 0; margin: 0; }
+ol.rules { list-style: none; padding: 0; margin: 0; }
 ol.rules > li {
-  counter-increment: rule;
   position: relative;
-  padding: 14px 0 14px 4.5em;
+  padding: 14px 0 14px 4.6em;
   text-indent: 0;
   border-bottom: 1px dashed rgba(74,68,60,0.25);
   min-height: 32px;
 }
 ol.rules > li:last-child { border-bottom: none; }
-ol.rules > li::before {
-  content: "第 " counter(rule) " 條";
+.rule-num {
   position: absolute;
   left: 0;
   top: 14px;
+  display: inline-block;
   font-size: 12px;
   letter-spacing: 0.08em;
   color: var(--ink-faint);
   font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", "Courier New", monospace;
   white-space: nowrap;
-  width: auto;
+  width: 4em;
+  text-align: right;
+  padding-right: 0.6em;
 }
+.rule-body { display: block; }
 
 li.inserted { animation: insert 1.4s ease-out; }
 @keyframes insert {
@@ -169,7 +172,8 @@ button.restart:hover { border-style: solid; color: var(--ink); }
 @media (max-width: 600px) {
   #app { padding: 32px 12px 64px; }
   .scene-card { padding: 32px 20px; }
-  ol.rules > li { padding-left: 3.5em; }
+  ol.rules > li { padding-left: 3.6em; }
+  .rule-num { width: 3em; }
   h1 { font-size: 22px; }
   html, body { font-size: 16px; }
 }

@@ -47,11 +47,17 @@ function el(tag, props = {}, children = []) {
 
 function renderRules(state) {
   const ol = el("ol", { class: "rules" });
-  state.rules.forEach((rule) => {
+  state.rules.forEach((rule, i) => {
     const cls = ["rule"];
     if (rule.inserted) cls.push("inserted");
     if (rule.amended) cls.push("amended");
-    ol.appendChild(el("li", { class: cls.join(" ") }, [rule.text]));
+    // Use real markup for the rule index, not a CSS pseudo-element.
+    // CJK + monospace mixed metrics across iOS / Telegram WebView broke
+    // the previous "content: '第 ' counter(rule) ' 條'" approach.
+    ol.appendChild(el("li", { class: cls.join(" ") }, [
+      el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
+      el("span", { class: "rule-body" }, rule.text),
+    ]));
   });
   return ol;
 }
@@ -100,6 +106,7 @@ export function renderScene(sceneId) {
     state = {
       rules: scene.initialRules.map((t) => ({ text: t, inserted: false, amended: false })),
       choices: [], fired: {},
+      actions: {}, // scene onChoose hooks write counters here; must exist or first click throws
       startedAt: Date.now(), visitCount,
       time: 21 * 60, // 21:00 as minutes-of-day, ticks +5 per action
       checkOutPassed: false,
@@ -137,13 +144,20 @@ export function renderScene(sceneId) {
         for (const a of actions) {
           wrap.appendChild(el("button", {
             type: "button",
+            "data-action": a.id,
             onclick: (ev) => {
               ev.preventDefault();
               if (state.ended) return;
-              a.onChoose(state, ctx);
-              evaluateTriggers(scene, state, ctx);
-              checkEndings(scene, state, ctx);
-              saveState(sceneId, state);
+              try {
+                a.onChoose(state, ctx);
+                evaluateTriggers(scene, state, ctx);
+                checkEndings(scene, state, ctx);
+                saveState(sceneId, state);
+              } catch (err) {
+                console.error("[rule-horror] action failed", a.id, err);
+                renderError(err, a.id);
+                return;
+              }
               rerender();
             },
           }, a.label));
@@ -164,6 +178,24 @@ function formatTime(mins) {
   const h = Math.floor(mins / 60) % 24;
   const m = mins % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function renderError(err, actionId) {
+  $app.innerHTML = "";
+  const card = el("div", { class: "scene-card" });
+  card.appendChild(el("h1", {}, "守則出差錯了"));
+  card.appendChild(el("p", { class: "scene-intro" },
+    actionId ? `剛才的動作「${actionId}」把守則弄亂了。請回到首頁重來。`
+             : "守則還沒準備好。請回到首頁重來。"));
+  const pre = el("pre", {},
+    String(err && err.stack || err));
+  pre.style.cssText = "white-space:pre-wrap;font-size:12px;color:var(--accent);padding:12px;border:1px dashed var(--accent-soft);background:rgba(110,31,31,0.05);";
+  card.appendChild(pre);
+  card.appendChild(el("button", {
+    class: "restart",
+    onclick: (ev) => { ev.preventDefault(); location.hash = ""; location.reload(); },
+  }, "返回首頁"));
+  $app.appendChild(card);
 }
 
 export function renderIndex() {
