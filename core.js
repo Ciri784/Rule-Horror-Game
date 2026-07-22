@@ -157,8 +157,17 @@ export function renderScene(sceneId) {
     // 敘事欄 (center)
     const narrCol = el("section", { class: "col col-narrative" });
     narrCol.appendChild(el("h2", { class: "col-title" }, "此刻"));
-    narrCol.appendChild(el("div", { class: "narrative-stream", id: "narrative-stream" }));
-    renderNarrativeStream(state);
+    const streamEl = el("div", { class: "narrative-stream", id: "narrative-stream" });
+    narrCol.appendChild(streamEl);
+    // Append the grid BEFORE calling renderNarrativeStream so the
+    // narrator can find the stream element via document.getElementById
+    // (used by action-button onclick to add the .just-typed class).
+    // Bug: previously we called renderNarrativeStream while the grid was
+    // still detached, so getElementById returned null and the stream
+    // stayed empty.
+    const grid = el("div", { class: "scene-grid" }, [rulesCol, narrCol, actCol]);
+    appRoot().appendChild(grid);
+    renderNarrativeStream(streamEl, state);
 
     // 行動欄 (right on desktop, bottom on mobile)
     const actCol = el("aside", { class: "col col-actions" });
@@ -210,10 +219,9 @@ export function renderScene(sceneId) {
     actCol.appendChild(el("div", { class: "meta" },
       `場所版本 · ${state.visitCount}`));
 
-    const grid = el("div", { class: "scene-grid" }, [rulesCol, narrCol, actCol]);
-    appRoot().appendChild(grid);
-
-    // scroll narrative to bottom after render
+    // grid is appended in the narrative-column block above so the
+    // narrator can run immediately. Just scroll the stream to the
+    // bottom of the newest entry here.
     const stream = document.getElementById("narrative-stream");
     if (stream) stream.scrollTop = stream.scrollHeight;
   }
@@ -240,8 +248,7 @@ function renderError(err, actionId) {
   appRoot().appendChild(card);
 }
 
-function renderNarrativeStream(state) {
-  const stream = document.getElementById("narrative-stream");
+function renderNarrativeStream(stream, state) {
   if (!stream) return;
   stream.innerHTML = "";
   if (!Array.isArray(state.narrative)) state.narrative = [];
