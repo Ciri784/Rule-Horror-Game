@@ -217,8 +217,6 @@ export function renderScene(sceneId) {
     // 行動欄 (right on desktop, bottom on mobile)
     const actCol = el("aside", { class: "col col-actions" });
     actCol.appendChild(el("h2", { class: "col-title" }, "您可以"));
-    actCol.appendChild(el("div", { class: "clock" }, formatTime(state.time)));
-
     const ending = state.ended ? scene.endings.find((e) => e.id === state.ended) : null;
     if (ending) {
       actCol.appendChild(el("div", { class: "scene-end" }, [

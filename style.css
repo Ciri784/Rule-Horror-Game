@@ -256,22 +256,74 @@ li.amended::after {
 }
 .narr-text { display: block; }
 
-/* ============== 行動欄 ============== */
-.clock {
-  font-family: "Courier New", ui-monospace, monospace;
-  font-size: 38px;
-  font-weight: bold;
-  letter-spacing: 0.1em;
-  color: var(--phosphor);
-  margin: 0 0 22px 0;
-  text-align: center;
-  padding: 14px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  text-shadow: 0 0 8px rgba(158,201,158,0.5);
-}
 .actions { display: flex; flex-direction: column; gap: 8px; }
+.rulebook {
+  /* 跟 .action-btn 對齊的視覺 */
+  display: block;
+  background: var(--bg-3);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  padding: 0;
+  font-family: "Courier New", ui-monospace, "Source Han Serif TC", "Noto Serif TC", monospace, serif;
+  font-size: 13px;
+  transition: all 0.12s ease-out;
+  line-height: 1.55;
+  letter-spacing: 0.05em;
+  position: relative;
+}
+.rulebook[open] {
+  background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.rulebook-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.rulebook-summary::-webkit-details-marker { display: none; }
+.rulebook-summary::before {
+  content: "▸";
+  color: var(--accent);
+  font-weight: bold;
+  transition: transform 0.12s ease-out;
+}
+.rulebook[open] > .rulebook-summary::before {
+  transform: rotate(90deg);
+}
+.rulebook-title {
+  flex: 1;
+  font-weight: bold;
+}
+.rulebook-count {
+  font-size: 11px;
+  color: var(--ink-soft);
+  letter-spacing: 0.1em;
+}
+.rulebook[open] > .rulebook-summary {
+  color: var(--accent);
+  text-shadow: 0 0 4px rgba(210,74,74,0.6);
+}
+.rulebook .rules {
+  margin: 0;
+  padding: 0 14px 12px 36px;
+  list-style: none;
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
+.rules-empty {
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 14px;
+  border: 1px dashed var(--border);
+  background: var(--bg-3);
+  letter-spacing: 0.05em;
+}
+.rulebooks { display: flex; flex-direction: column; gap: 8px; }
 .action-btn {
   appearance: none;
   background: var(--bg-3);
@@ -445,7 +497,6 @@ pre {
   .col-narrative { order: 2; }
   .col-rules { order: 1; }
   .col-actions { order: 3; }
-  .clock { font-size: 30px; }
   .monitor::before, .monitor::after { font-size: 9px; }
   #app { padding: 8px; }
 }
@@ -456,7 +507,8 @@ pre {
   .narr-row { grid-template-columns: 50px 1fr; gap: 8px; font-size: 13px; }
   .narr-time { font-size: 10px; }
   .action-btn { font-size: 12px; padding: 10px 12px; }
-  .clock { font-size: 26px; }
+  .rulebook { font-size: 12px; }
+  .rulebook-summary { padding: 10px 12px; }
   .monitor-status { font-size: 9px; padding: 6px 10px; }
   .monitor-status span:nth-child(2) { display: none; }
 }
