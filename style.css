@@ -72,17 +72,23 @@ ol.rules { list-style: none; counter-reset: rule; padding: 0; margin: 0; }
 ol.rules > li {
   counter-increment: rule;
   position: relative;
-  padding: 14px 0 14px 56px;
+  padding: 14px 0 14px 4.5em;
+  text-indent: 0;
   border-bottom: 1px dashed rgba(74,68,60,0.25);
   min-height: 32px;
 }
 ol.rules > li:last-child { border-bottom: none; }
 ol.rules > li::before {
   content: "第 " counter(rule) " 條";
-  position: absolute; left: 0; top: 14px;
-  font-size: 12px; letter-spacing: 0.15em; color: var(--ink-faint);
-  font-family: "Courier New", monospace;
-  width: 48px; text-align: right;
+  position: absolute;
+  left: 0;
+  top: 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", "Courier New", monospace;
+  white-space: nowrap;
+  width: auto;
 }
 
 li.inserted { animation: insert 1.4s ease-out; }
@@ -157,3 +163,13 @@ button.restart {
   cursor: pointer;
 }
 button.restart:hover { border-style: solid; color: var(--ink); }
+
+
+/* Mobile: don't let the paper card slam the viewport edges. */
+@media (max-width: 600px) {
+  #app { padding: 32px 12px 64px; }
+  .scene-card { padding: 32px 20px; }
+  ol.rules > li { padding-left: 3.5em; }
+  h1 { font-size: 22px; }
+  html, body { font-size: 16px; }
+}
