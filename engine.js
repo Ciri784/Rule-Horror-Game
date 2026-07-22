@@ -22,60 +22,131 @@ export function narrate(state, text, kind) {
   state.narrative.push({ time: state.time, kind: kind || "narration", text });
 }
 
-// Pure rule list with the same shape renderScene uses for initial state.
-// (The DOM-ful "fresh state" builder lives in core.js; this is the same
-// factory minus the localStorage calls, so tests can build a clean state
-// without mocking storage.)
+// Build a clean state for a scene. Scenes opt in to the new applies-based
+// rules system by providing `scene.rules` (an object keyed by id). Scenes
+// that still use the legacy `scene.initialRules + scene.triggers` flow
+// get a `state.rules` array pre-populated with `{text, inserted, amended}`
+// entries; that legacy path is kept for backward compat with older tests
+// but the hotel scene no longer uses it.
 export function freshState(scene, now = Date.now()) {
-  const visitCount = 1; // tests start at 1; renderScene bumps for real plays
+  const visitCount = 1;
   return {
-    rules: scene.initialRules.map((t) => ({ text: t, inserted: false, amended: false })),
+    // legacy rules list — only populated for scenes that opt in to the
+    // trigger/insert/amend flow via scene.initialRules. New scenes
+    // (with scene.rules + applies) leave this empty; renderRules falls
+    // back to rulesFor() in that case.
+    rules: (scene.initialRules || []).map((t) => ({ text: t, inserted: false, amended: false })),
     choices: [], fired: {},
     actions: {},
     startedAt: now, visitCount,
     time: 21 * 60,
-    // True once game time has wrapped past 24:00 into a new day. Triggers
-    // that mean "after checkout the next morning" gate on this so they
-    // don't fire on the very first action at 21:00.
     crossedMidnight: false,
     _lastTime: 21 * 60,
     checkOutPassed: false,
     narrative: scene.openingNarrative
       ? [{ time: 21 * 60, kind: "narration", text: scene.openingNarrative }]
       : [],
+
+    // — new state shape for the applies-based system —
+    // What the player is actually carrying. Identity is *implied* by
+    // what's in here: a staff-card means they think they're staff,
+    // a guest-card means they think they're a guest. The hotel may
+    // disagree (see hotelView).
+    heldItems: scene.initialItems ? [...scene.initialItems] : [],
+    // The hotel's (possibly supernatural) judgment of who the player
+    // actually is, given the current held items, location, and time.
+    // Possible values: 'guest' | 'staff' | 'intruder' | 'unknown'.
+    hotelView: scene.initialHotelView || 'unknown',
+    // Where the player currently is. Drives the applies() filter on
+    // rules (rules can gate on location).
+    location: scene.initialLocation || 'room-704',
+    // Rule ids the player has *unlocked* so far through exploration.
+    // Once unlocked, a rule is part of the player's library even if it
+    // isn't currently in effect — they can re-read the collection.
+    unlockedRuleIds: scene.initialUnlockedRuleIds
+      ? [...scene.initialUnlockedRuleIds]
+      : [],
   };
 }
 
+// Compute which rules from `scene.rules` currently apply to the player.
+// A rule applies if:
+//   1. The player has unlocked it (id is in state.unlockedRuleIds), AND
+//   2. The rule's applies(state) predicate returns true (or is missing).
+//
+// Rules are returned in the order the scene declared them, so the
+// "current rules" list feels like a fixed wall of text that grows as
+// you explore.
+export function rulesFor(scene, state) {
+  if (!scene.rules) return [];
+  const out = [];
+  for (const [id, rule] of Object.entries(scene.rules)) {
+    if (!state.unlockedRuleIds.includes(id)) continue;
+    if (typeof rule.applies === "function" && !rule.applies(state)) continue;
+    out.push({ id, ...rule });
+  }
+  return out;
+}
+
+// Recompute state.hotelView from the current held items, location, and
+// time. The hotel's judgment rules are scene-defined via
+// `scene.hotelJudges` (an array of `{when, view}` clauses evaluated in
+// order; the first match wins). If no clause matches, defaults to
+// scene.defaultHotelView or 'unknown'.
+//
+// This is called at the start of evaluateTriggers so the predicate
+// functions on the rules always see a fresh hotelView.
+function recomputeHotelView(scene, state) {
+  if (!Array.isArray(scene.hotelJudges)) {
+    state.hotelView = scene.defaultHotelView || 'unknown';
+    return;
+  }
+  for (const clause of scene.hotelJudges) {
+    if (clause.when(state)) {
+      state.hotelView = clause.view;
+      return;
+    }
+  }
+  state.hotelView = scene.defaultHotelView || 'unknown';
+}
+
 export function evaluateTriggers(scene, state, ctx) {
-  // Day-rollover detection: if onChoose pushed time forward and the new
-  // time is earlier than the previous one, we just crossed midnight. This
-  // is what "the night is over" actually means in this engine, since
-  // state.time is minutes-of-day (mod 24*60).
+  // Day-rollover detection.
   if (typeof state._lastTime === "number" && state.time < state._lastTime) {
     state.crossedMidnight = true;
   }
   state._lastTime = state.time;
 
-  const added = [];
-  for (const t of scene.triggers) {
-    if (state.fired[t.id]) continue;
-    if (!t.when(state, ctx)) continue;
-    state.fired[t.id] = true;
-    if (t.mode === "amend" && typeof t.target === "number") {
-      const target = state.rules[t.target];
-      if (target) {
-        target.amended = true;
-        target.text = t.body;
-        narrate(state, `守則第 ${t.target + 1} 條被悄悄修訂。`, "rule-amended");
+  // Recompute the hotel's view of the player before any rules fire,
+  // so applies() predicates see the current view.
+  recomputeHotelView(scene, state);
+
+  // Legacy trigger/insert/amend flow. Only used by scenes that still
+  // have scene.triggers defined; the new applies-based hotel scene
+  // doesn't have any.
+  if (Array.isArray(scene.triggers)) {
+    const added = [];
+    for (const t of scene.triggers) {
+      if (state.fired[t.id]) continue;
+      if (!t.when(state, ctx)) continue;
+      state.fired[t.id] = true;
+      if (t.mode === "amend" && typeof t.target === "number") {
+        const target = state.rules[t.target];
+        if (target) {
+          target.amended = true;
+          target.text = t.body;
+          narrate(state, `守則第 ${t.target + 1} 條被悄悄修訂。`, "rule-amended");
+        }
+      } else {
+        const pos = Math.max(1, Math.floor(Math.random() * state.rules.length));
+        state.rules.splice(pos, 0, { text: t.body, inserted: true });
+        narrate(state, `守則多了一條——第 ${pos + 1} 條：「${t.body}」`, "rule-added");
       }
-    } else {
-      const pos = Math.max(1, Math.floor(Math.random() * state.rules.length));
-      state.rules.splice(pos, 0, { text: t.body, inserted: true });
-      narrate(state, `守則多了一條——第 ${pos + 1} 條：「${t.body}」`, "rule-added");
+      added.push(t);
     }
-    added.push(t);
+    return added;
   }
-  return added;
+  return [];
 }
 
 export function checkEndings(scene, state, ctx) {
@@ -96,9 +167,48 @@ export function formatTime(mins) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-// Run one player action the same way renderScene does. Returns the ending
-// if the action ended the scene, else null. Pure: mutates state, no DOM,
-// no storage.
+// Convenience for scenes whose actions want to hand the player a new
+// item. Records the pickup in heldItems, narrates it, and recomputes
+// hotelView so any rule predicates that gate on the item see it.
+export function pickUp(itemId, state, ctx) {
+  if (state.heldItems.includes(itemId)) return false;
+  state.heldItems.push(itemId);
+  const label = (ctx && ctx.itemLabels && ctx.itemLabels[itemId]) || itemId;
+  if (ctx && ctx.narrate) ctx.narrate(`你撿到了${label}。`, "item");
+  else narrate(state, `你撿到了${label}。`, "item");
+  if (ctx && ctx.scene) recomputeHotelView(ctx.scene, state);
+  return true;
+}
+
+
+// Move the player to a new location. Narrates the move, recomputes
+// hotelView (some clauses gate on location).
+export function moveTo(scene, state, locationId, label) {
+  if (state.location === locationId) return false;
+  state.location = locationId;
+  narrate(state, `你走到${label}。`, "movement");
+  recomputeHotelView(scene, state);
+  return true;
+}
+
+// Unlock a rule for the player. Rules are content-addressed by id; once
+// unlocked they stay in state.unlockedRuleIds for the rest of the run.
+export function unlockRule(ruleId, state, ctx) {
+  if (state.unlockedRuleIds.includes(ruleId)) return false;
+  state.unlockedRuleIds.push(ruleId);
+  const scene = ctx && ctx.scene;
+  const rule = scene && scene.rules && scene.rules[ruleId];
+  if (rule) {
+    const text = `你學到了一條守則：「${rule.text}」`;
+    if (ctx && ctx.narrate) ctx.narrate(text, "rule-unlocked");
+    else narrate(state, text, "rule-unlocked");
+  }
+  return true;
+}
+
+// Run one player action the same way renderScene does. Returns the
+// ending if the action ended the scene, else null. Pure: mutates
+// state, no DOM, no storage.
 export function applyAction(scene, state, actionId, ctx) {
   const actions = scene.actions(state, ctx) || [];
   const a = actions.find((x) => x.id === actionId);
