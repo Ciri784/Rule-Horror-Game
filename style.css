@@ -1,13 +1,13 @@
-/* Rule Horror — visual style */
+/* Rule Horror — 米紙感、深褐墨色、serif。
+   三欄 grid: 規則 | 此刻(敘事) | 您可以(行動)。 */
 
 :root {
-  --ink: #1a1814;
-  --ink-soft: #4a443c;
-  --ink-faint: #8a8074;
   --paper: #efe7d6;
-  --paper-edge: #d8cdb6;
+  --paper-2: #e7dec7;
+  --ink: #2a241c;
+  --ink-faint: #7a6f5e;
   --accent: #6e1f1f;
-  --accent-soft: #a14a3a;
+  --accent-soft: #b87373;
 }
 
 * { box-sizing: border-box; }
@@ -15,67 +15,68 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #1f1c17;
+  background: var(--paper);
   color: var(--ink);
-  font-family: "Iowan Old Style", "Source Han Serif TC", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  font-family: "Iowan Old Style", "Source Han Serif TC", "Noto Serif TC",
+               "Songti TC", "PMingLiU", serif;
   font-size: 17px;
-  line-height: 1.7;
-  letter-spacing: 0.01em;
+  line-height: 1.65;
   min-height: 100vh;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at top, rgba(0,0,0,0.4), transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(0,0,0,0.5), transparent 60%);
-  pointer-events: none;
-  z-index: 0;
-}
-
 #app {
-  position: relative;
-  z-index: 1;
-  max-width: 720px;
+  min-height: 100vh;
+}
+
+/* ============== 三欄 grid ============== */
+.scene-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  gap: 0;
+  min-height: 100vh;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 64px 32px 96px;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px rgba(74,68,60,0.15);
 }
 
-.scene-card {
-  background: var(--paper);
-  border: 1px solid var(--paper-edge);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,0.4) inset,
-    0 12px 40px rgba(0,0,0,0.6);
-  padding: 48px 40px;
+.col {
+  padding: 32px 28px;
+  min-height: 100vh;
   position: relative;
 }
 
-.scene-card::before {
-  content: "";
-  position: absolute;
-  top: 16px; left: 16px;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--paper-edge);
+.col-rules { border-right: 1px solid rgba(74,68,60,0.18); background: var(--paper-2); }
+.col-narrative { background: var(--paper); }
+.col-actions { border-left: 1px solid rgba(74,68,60,0.18); background: var(--paper-2); }
+
+.col-title {
+  font-size: 13px;
+  font-weight: normal;
+  letter-spacing: 0.3em;
+  color: var(--ink-faint);
+  text-transform: none;
+  margin: 0 0 20px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed rgba(74,68,60,0.3);
+}
+.col-sub {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: -12px 0 16px 0;
+  font-style: italic;
 }
 
-h1, h2, h3 { font-weight: 600; letter-spacing: 0.02em; margin: 0 0 0.6em; }
-h1 { font-size: 28px; text-align: center; border-bottom: 1px solid var(--ink-soft); padding-bottom: 16px; margin-bottom: 32px; }
-h2 { font-size: 20px; margin-top: 32px; }
-
-.scene-intro { color: var(--ink-soft); font-size: 15px; margin-bottom: 28px; border-left: 2px solid var(--paper-edge); padding-left: 14px; }
-
-ol.rules { list-style: none; counter-reset: rule; padding: 0; margin: 0; }
-ol.rules { list-style: none; padding: 0; margin: 0; }
+/* ============== 規則欄 ============== */
+ol.rules { list-style: none; padding: 0; margin: 0; counter-reset: rule; }
 ol.rules > li {
   position: relative;
   padding: 14px 0 14px 4.6em;
   text-indent: 0;
   border-bottom: 1px dashed rgba(74,68,60,0.25);
   min-height: 32px;
+  font-size: 15px;
+  line-height: 1.7;
 }
 ol.rules > li:last-child { border-bottom: none; }
 .rule-num {
@@ -83,97 +84,246 @@ ol.rules > li:last-child { border-bottom: none; }
   left: 0;
   top: 14px;
   display: inline-block;
+  width: 4em;
+  text-align: right;
+  padding-right: 0.6em;
   font-size: 12px;
   letter-spacing: 0.08em;
   color: var(--ink-faint);
   font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", "Courier New", monospace;
   white-space: nowrap;
-  width: 4em;
-  text-align: right;
-  padding-right: 0.6em;
 }
 .rule-body { display: block; }
-
-li.inserted { animation: insert 1.4s ease-out; }
-@keyframes insert {
-  0% { background: rgba(110,31,31,0.18); color: var(--accent); transform: translateX(-4px); }
-  60% { background: rgba(110,31,31,0.08); color: var(--ink); transform: translateX(0); }
-  100% { background: transparent; color: var(--ink); }
+li.inserted {
+  animation: insert 1.6s ease-out;
+  background: linear-gradient(90deg, rgba(110,31,31,0.12), transparent 80%);
 }
-
+@keyframes insert {
+  0% { background: rgba(110,31,31,0.22); transform: translateX(-6px); opacity: 0.2; }
+  60% { background: rgba(110,31,31,0.08); transform: translateX(0); opacity: 1; }
+  100% { background: transparent; opacity: 1; }
+}
+li.amended { color: var(--accent); }
 li.amended::after {
   content: "（此條已修訂）";
-  display: block; margin-top: 6px;
-  font-size: 12px; color: var(--accent-soft); font-style: italic;
+  display: block;
+  font-size: 11px;
+  color: var(--accent-soft);
+  margin-top: 2px;
+  font-style: italic;
 }
 
-.actions { margin-top: 40px; display: flex; flex-direction: column; gap: 10px; }
-.actions button {
-  font: inherit;
-  background: transparent;
+/* ============== 敘事欄 ============== */
+.narrative-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  padding-right: 8px;
+  scroll-behavior: smooth;
+}
+.narrative-stream::-webkit-scrollbar { width: 6px; }
+.narrative-stream::-webkit-scrollbar-thumb { background: rgba(74,68,60,0.25); border-radius: 3px; }
+
+.narr-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 16px;
+  line-height: 1.8;
+  opacity: 0;
+  animation: fade-in 0.6s ease-out forwards;
+}
+@keyframes fade-in {
+  to { opacity: 1; }
+}
+.narr-row.just-typed {
+  /* 打字機效果：CSS animation 從 0 char width 展開 */
+  animation: fade-in 0.6s ease-out forwards, type-in 1.2s steps(60, end) forwards;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 1px solid var(--ink);
+}
+.narr-row.kind-rule-added {
+  color: var(--accent);
+  font-weight: 500;
+  border-left: 2px solid var(--accent-soft);
+  padding-left: 10px;
+  margin-left: -12px;
+}
+.narr-row.kind-rule-amended {
+  color: var(--accent-soft);
+  font-style: italic;
+}
+.narr-row.kind-ending {
+  border-top: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
+  padding: 14px 10px;
+  margin: 8px 0;
+  font-size: 17px;
   color: var(--ink);
-  border: 1px solid var(--ink-soft);
-  padding: 12px 18px;
+  text-align: center;
+  white-space: normal;
+}
+.narr-time {
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  color: var(--ink-faint);
+  letter-spacing: 0.05em;
+  text-align: right;
+}
+.narr-text {
+  display: block;
+}
+
+@keyframes type-in {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* ============== 行動欄 ============== */
+.clock {
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", "Courier New", monospace;
+  font-size: 36px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  margin: 0 0 24px 0;
+  text-align: center;
+  padding: 12px 0;
+  border-top: 1px solid rgba(74,68,60,0.4);
+  border-bottom: 1px solid rgba(74,68,60,0.4);
+}
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.action-btn {
+  appearance: none;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid rgba(74,68,60,0.4);
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 15px;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.15s ease-out;
+  line-height: 1.5;
 }
-.actions button:hover, .actions button:focus {
-  background: var(--ink); color: var(--paper); outline: none;
+.action-btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateX(-3px);
 }
-.actions button::before { content: "▸ "; color: var(--ink-faint); margin-right: 4px; }
-.actions button:hover::before, .actions button:focus::before { color: var(--paper); }
+.action-btn:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.action-btn:active { transform: translateX(-1px) scale(0.99); }
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
 
-.scene-pick { display: grid; gap: 16px; margin-top: 24px; }
-.scene-pick a {
-  display: block;
-  background: var(--paper); color: var(--ink);
-  text-decoration: none;
-  border: 1px solid var(--paper-edge);
-  padding: 20px 24px;
-  transition: transform 0.15s, box-shadow 0.15s;
+.meta {
+  margin-top: 32px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  text-align: center;
+  letter-spacing: 0.1em;
+  font-style: italic;
 }
-.scene-pick a:hover, .scene-pick a:focus {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-  outline: none;
-}
-.scene-pick a .name { font-size: 18px; font-weight: 600; display: block; margin-bottom: 4px; }
-.scene-pick a .blurb { font-size: 14px; color: var(--ink-soft); }
 
-.meta { margin-top: 48px; font-size: 12px; color: var(--ink-faint); text-align: center; letter-spacing: 0.1em; }
-
-.scene-end { text-align: center; padding: 32px 0; color: var(--ink-soft); }
+/* ============== 結局 ============== */
+.scene-end { text-align: center; margin-top: 24px; }
 .scene-end .stamp {
   display: inline-block;
   border: 2px solid var(--accent);
   color: var(--accent);
-  padding: 6px 14px;
-  font-size: 14px;
-  letter-spacing: 0.2em;
-  margin-top: 16px;
-  font-family: "Courier New", monospace;
+  padding: 8px 20px;
+  font-family: ui-monospace, monospace;
+  font-size: 18px;
+  letter-spacing: 0.3em;
   transform: rotate(-3deg);
+  margin-bottom: 16px;
+  font-weight: bold;
 }
-
-button.restart {
-  margin-top: 32px;
+.restart {
+  appearance: none;
   background: transparent;
+  color: var(--ink);
   border: 1px dashed var(--ink-faint);
-  color: var(--ink-soft);
-  padding: 10px 18px;
-  font: inherit;
+  padding: 8px 18px;
+  font-family: inherit;
+  font-size: 13px;
   cursor: pointer;
+  letter-spacing: 0.1em;
 }
-button.restart:hover { border-style: solid; color: var(--ink); }
+.restart:hover { background: var(--ink); color: var(--paper); border-style: solid; }
 
+/* ============== 首頁 ============== */
+.scene-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 600px;
+  margin: 80px auto;
+  padding: 0 24px;
+}
+.scene-pick a {
+  display: block;
+  padding: 24px;
+  background: var(--paper-2);
+  border: 1px solid rgba(74,68,60,0.3);
+  text-decoration: none;
+  color: var(--ink);
+  transition: all 0.2s ease-out;
+}
+.scene-pick a:hover {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateX(4px);
+}
+.scene-pick h2 { margin: 0 0 8px 0; font-size: 22px; }
+.scene-pick p { margin: 0; color: var(--ink-faint); font-size: 14px; }
+.scene-pick a:hover p { color: var(--paper); }
 
-/* Mobile: don't let the paper card slam the viewport edges. */
+/* ============== Error ============== */
+pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--accent);
+  padding: 12px;
+  border: 1px dashed var(--accent-soft);
+  background: rgba(110,31,31,0.05);
+}
+
+/* ============== Mobile ============== */
+@media (max-width: 900px) {
+  .scene-grid {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+  .col { min-height: auto; padding: 20px 18px; }
+  .col-rules { border-right: none; border-bottom: 1px solid rgba(74,68,60,0.18); }
+  .col-actions { border-left: none; border-top: 1px solid rgba(74,68,60,0.18); }
+  .narrative-stream { max-height: none; }
+  .col-narrative { order: 2; }
+  .col-rules { order: 1; }
+  .col-actions { order: 3; }
+  .clock { font-size: 28px; }
+}
 @media (max-width: 600px) {
-  #app { padding: 32px 12px 64px; }
-  .scene-card { padding: 32px 20px; }
-  ol.rules > li { padding-left: 3.6em; }
-  .rule-num { width: 3em; }
-  h1 { font-size: 22px; }
-  html, body { font-size: 16px; }
+  body { font-size: 16px; }
+  .col { padding: 16px 14px; }
+  .col-title { font-size: 11px; letter-spacing: 0.2em; }
+  .narr-row { grid-template-columns: 50px 1fr; gap: 8px; font-size: 15px; }
+  .narr-time { font-size: 11px; }
+  .action-btn { font-size: 14px; padding: 10px 14px; }
+  .clock { font-size: 24px; }
 }

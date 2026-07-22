@@ -5,11 +5,14 @@
 // Scene contract:
 //   {
 //     id, title, blurb, intro,
+//     openingNarrative: string,                       // first beat in the narrative stream
 //     initialRules: [string, ...],
 //     actions(state, ctx) -> [{ id, label, onChoose(state, ctx) }, ...],
 //     triggers: [{ id, when(state, ctx) -> bool, body, mode: "insert"|"amend", target? }],
 //     endings: [{ id, label, when(state, ctx) -> bool, text }]
 //   }
+//   onChoose may call ctx.narrate(text, kind?) to push a narration entry
+//   into the current state's narrative stream.
 
 const STORAGE_PREFIX = "rule-horror:";
 const $app = document.getElementById("app");
@@ -25,6 +28,9 @@ function clearState(id) {
   try { localStorage.removeItem(STORAGE_PREFIX + id); } catch {}
 }
 
+function narrate(state, text, kind) {
+  state.narrative.push({ time: state.time, kind: kind || "narration", text });
+}
 const scenes = {};
 export function registerScene(scene) { scenes[scene.id] = scene; }
 export function getScene(id) { return scenes[id]; }
@@ -70,10 +76,15 @@ function evaluateTriggers(scene, state, ctx) {
     state.fired[t.id] = true;
     if (t.mode === "amend" && typeof t.target === "number") {
       const target = state.rules[t.target];
-      if (target) { target.amended = true; target.text = t.body; }
+      if (target) {
+        target.amended = true;
+        target.text = t.body;
+        narrate(state, `守則第 ${t.target + 1} 條被悄悄修訂。`, "rule-amended");
+      }
     } else {
       const pos = Math.max(1, Math.floor(Math.random() * state.rules.length));
       state.rules.splice(pos, 0, { text: t.body, inserted: true });
+      narrate(state, `守則多了一條——第 ${pos + 1} 條：「${t.body}」`, "rule-added");
     }
     added.push(t);
   }
@@ -83,7 +94,11 @@ function evaluateTriggers(scene, state, ctx) {
 function checkEndings(scene, state, ctx) {
   for (const e of scene.endings) {
     if (state.ended === e.id) return e;
-    if (e.when(state, ctx)) { state.ended = e.id; return e; }
+    if (e.when(state, ctx)) {
+      state.ended = e.id;
+      narrate(state, e.text, "ending");
+      return e;
+    }
   }
   return null;
 }
@@ -110,6 +125,7 @@ export function renderScene(sceneId) {
       startedAt: Date.now(), visitCount,
       time: 21 * 60, // 21:00 as minutes-of-day, ticks +5 per action
       checkOutPassed: false,
+      narrative: scene.openingNarrative ? [{ time: 21 * 60, kind: "narration", text: scene.openingNarrative }] : [],
     };
     saveState(sceneId + ":visits", visitCount);
     saveState(sceneId, state);
@@ -125,25 +141,35 @@ export function renderScene(sceneId) {
     }
   }
 
-  const ctx = { visitCount: state.visitCount, fresh };
+  const ctx = { visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
 
   function rerender() {
     $app.innerHTML = "";
-    const card = el("div", { class: "scene-card" });
-    card.appendChild(el("h1", {}, scene.title));
-    if (scene.intro) card.appendChild(el("p", { class: "scene-intro" }, scene.intro));
+
+    // 規則欄 (left on desktop, top on mobile)
+    const rulesCol = el("aside", { class: "col col-rules" });
+    rulesCol.appendChild(el("h2", { class: "col-title" }, "旅客守則"));
     if (state.visitCount > 1) {
-      card.appendChild(el("p", { class: "scene-intro" },
-        `這是您第 ${state.visitCount} 次進入這個場所。`));
+      rulesCol.appendChild(el("p", { class: "col-sub" },
+        `第 ${state.visitCount} 次入住`));
     }
-    card.appendChild(renderRules(state));
+    rulesCol.appendChild(renderRules(state));
+
+    // 敘事欄 (center)
+    const narrCol = el("section", { class: "col col-narrative" });
+    narrCol.appendChild(el("h2", { class: "col-title" }, "此刻"));
+    narrCol.appendChild(el("div", { class: "narrative-stream", id: "narrative-stream" }));
+    renderNarrativeStream(state);
+
+    // 行動欄 (right on desktop, bottom on mobile)
+    const actCol = el("aside", { class: "col col-actions" });
+    actCol.appendChild(el("h2", { class: "col-title" }, "您可以"));
+    actCol.appendChild(el("div", { class: "clock" }, formatTime(state.time)));
 
     const ending = state.ended ? scene.endings.find((e) => e.id === state.ended) : null;
     if (ending) {
-      card.appendChild(el("div", { class: "scene-end" }, [
-        el("p", {}, ending.text),
+      actCol.appendChild(el("div", { class: "scene-end" }, [
         el("div", { class: "stamp" }, ending.label),
-        el("br", {}),
         el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); restart(); } },
           el("button", { class: "restart" }, "重新入住")),
       ]));
@@ -154,6 +180,7 @@ export function renderScene(sceneId) {
         for (const a of actions) {
           wrap.appendChild(el("button", {
             type: "button",
+            class: "action-btn",
             "data-action": a.id,
             onclick: (ev) => {
               ev.preventDefault();
@@ -172,15 +199,24 @@ export function renderScene(sceneId) {
                 return;
               }
               rerender();
+              // type out the newest narrative line
+              const stream = document.getElementById("narrative-stream");
+              if (stream) stream.lastElementChild && stream.lastElementChild.classList.add("just-typed");
             },
           }, a.label));
         }
-        card.appendChild(wrap);
+        actCol.appendChild(wrap);
       }
     }
-    card.appendChild(el("div", { class: "meta" },
-      `本場所版本 · ${state.visitCount} · 房間時間 ${formatTime(state.time)}`));
-    $app.appendChild(card);
+    actCol.appendChild(el("div", { class: "meta" },
+      `場所版本 · ${state.visitCount}`));
+
+    const grid = el("div", { class: "scene-grid" }, [rulesCol, narrCol, actCol]);
+    $app.appendChild(grid);
+
+    // scroll narrative to bottom after render
+    const stream = document.getElementById("narrative-stream");
+    if (stream) stream.scrollTop = stream.scrollHeight;
   }
 
   function restart() { clearState(sceneId); renderScene(sceneId); }
@@ -211,6 +247,18 @@ function renderError(err, actionId) {
   $app.appendChild(card);
 }
 
+function renderNarrativeStream(state) {
+  const stream = document.getElementById("narrative-stream");
+  if (!stream) return;
+  stream.innerHTML = "";
+  for (const entry of state.narrative) {
+    const row = el("div", { class: `narr-row kind-${entry.kind}` }, [
+      el("span", { class: "narr-time" }, formatTime(entry.time)),
+      el("span", { class: "narr-text" }, entry.text),
+    ]);
+    stream.appendChild(row);
+  }
+}
 export function renderIndex() {
   $app.innerHTML = "";
   const card = el("div", { class: "scene-card" });
