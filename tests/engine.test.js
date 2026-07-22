@@ -32,16 +32,16 @@ describe("new applies-based system", () => {
     expect(state.heldItems).toEqual(["guest-card"]);
     expect(state.hotelView).toBe("guest");
     expect(state.location).toBe("room-704");
-    expect(state.unlockedRuleIds).toEqual(["r1", "r2", "r3", "r9", "r10"]);
+    expect(state.unlockedRuleIds).toEqual(["r1", "r2", "r3", "r9", "r10", "r21", "r22"]);
   });
   it("rulesFor returns only rules that are unlocked AND pass applies()", () => {
     const { state } = boot();
     // Stage B with default scene: r1, r2, r3 are pre-unlocked
     // (旅客卡 + 已在 room-704 + 旅館視角) all pass applies() at boot.
     // 開局 5 條旅客守則 (r1, r2, r3, r9, r10)
-    expect(rulesFor(hotel, state)).toHaveLength(5);
+    expect(rulesFor(hotel, state)).toHaveLength(7);  // r1, r2, r3, r9, r10, r21, r22
     unlockRule("r4", state, hotel);  // r4 需 staff-manual,不該進入
-    expect(rulesFor(hotel, state)).toHaveLength(5);
+    expect(rulesFor(hotel, state)).toHaveLength(7);
     state.location = "lobby";
     state.heldItems = [];  // 離開旅館、繳回房卡
     expect(rulesFor(hotel, state)).toHaveLength(0);
@@ -78,12 +78,13 @@ describe("hotel judges — time-based view", () => {
 });
 
 describe("endings", () => {
-  it("checkout-passed fires at 06:00 if hotelView = guest", () => {
+  // checkout-passed ending 拿掉 — 改用 narrative trigger (飯店敲門要退房), 不再自動通關
+  it("claimed-by-clerk fires if hotelView = intruder past 22:00", () => {
     const { state } = boot();
-    pretendNextMorning(state, 6, 0);
-    state.hotelView = "guest";
+    state.hotelView = "intruder";
+    state.time = 23 * 60;
     const e = checkEndings(hotel, state, { narrate: () => {} });
-    expect(e && e.id).toBe("checkout-passed");
+    expect(e && e.id).toBe("claimed-by-clerk");
   });
   it("claimed-by-clerk fires if hotelView = intruder past 22:00", () => {
     const { state } = boot();
@@ -101,10 +102,10 @@ describe("applyAction", () => {
   });
   it("does nothing after state.ended is set", () => {
     const { state, ctx } = boot();
-    state.ended = "checkout-passed";
+    state.ended = "claimed-by-clerk";
     const before = state.narrative.length;
     const e = applyAction(hotel, state, "look-door", ctx);
-    expect(e && e.id).toBe("checkout-passed");
+    expect(e && e.id).toBe("claimed-by-clerk");
     expect(state.narrative.length).toBe(before);
   });
 });

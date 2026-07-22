@@ -1,514 +1,359 @@
-/* Rule Horror — 監視器 / 終端機 / 老舊告示混搭。
-   不是書本排版,是要不安感。
-   配色: 漆黑底 + 磷光文字 + 紅色警戒。
-   字體: 等寬打字機 + 繁中宋體 fallback。 */
+// Rule Horror — core engine
+// State machine: scenes drive behavior; this file owns rendering, storage,
+// and the "rules mutate in the middle of the list" trick.
+//
+// Scene contract:
+//   {
+//     id, title, blurb, intro,
+//     openingNarrative: string,                       // first beat in the narrative stream
+//     initialRules: [string, ...],
+//     actions(state, ctx) -> [{ id, label, onChoose(state, ctx) }, ...],
+//     triggers: [{ id, when(state, ctx) -> bool, body, mode: "insert"|"amend", target? }],
+//     endings: [{ id, label, when(state, ctx) -> bool, text }]
+//   }
+//   onChoose may call ctx.narrate(text, kind?) to push a narration entry
+//   into the current state's narrative stream.
 
-:root {
-  --bg: #0a0a0c;
-  --bg-2: #131318;
-  --bg-3: #1a1a22;
-  --ink: #c8d3b9;
-  --ink-dim: #7a8470;
-  --ink-faint: #4a5040;
-  --accent: #d24a4a;
-  --accent-soft: #b87373;
-  --amber: #d4a04a;
-  --phosphor: #9ec99e;
-  --border: rgba(200,211,185,0.18);
-  --border-soft: rgba(200,211,185,0.08);
-}
+import {
+  loadState, saveState, clearState,
+  narrate, evaluateTriggers, checkEndings, formatTime,
+  freshState, rulesFor, applyAction,
+} from "./engine.js";
 
-* { box-sizing: border-box; }
+const scenes = {};
 
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: "Courier New", "Cutive Mono", ui-monospace, "Special Elite",
-               "Source Han Serif TC", "Noto Serif TC", "Songti TC", monospace, serif;
-  font-size: 15px;
-  line-height: 1.7;
-  min-height: 100vh;
-  /* CRT 掃描線 + 角落微 vignette */
-  background-image:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 2px,
-      rgba(0,0,0,0.15) 3px,
-      rgba(0,0,0,0) 4px
-    ),
-    radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
-  background-attachment: fixed;
+// $app is only meaningful in a browser. Resolve lazily so this module is
+// importable under Node (e.g. by tests) without a real document.
+let $app = null;
+function appRoot() {
+  if ($app) return $app;
+  $app = document.getElementById("app");
+  return $app;
 }
+export function registerScene(scene) { scenes[scene.id] = scene; }
+export function getScene(id) { return scenes[id]; }
+export function listScenes() { return Object.values(scenes); }
 
-#app {
-  min-height: 100vh;
-  padding: 14px;
-}
-
-/* ============== 監視器外殼 ============== */
-.monitor {
-  max-width: 1320px;
-  margin: 0 auto;
-  border: 1px solid var(--accent);
-  background: var(--bg-2);
-  box-shadow:
-    0 0 0 1px rgba(210,74,74,0.15),
-    0 0 32px rgba(210,74,74,0.10),
-    inset 0 0 80px rgba(0,0,0,0.6);
-  position: relative;
-}
-.monitor::before {
-  content: "● REC";
-  position: absolute;
-  top: -1px;
-  left: 12px;
-  transform: translateY(-50%);
-  background: var(--bg-2);
-  padding: 0 8px;
-  color: var(--accent);
-  font-size: 11px;
-  letter-spacing: 0.3em;
-  font-family: inherit;
-  animation: rec-blink 1.6s steps(2, end) infinite;
-}
-.monitor::after {
-  content: "頻道 CH-04  /  場所監視系統";
-  position: absolute;
-  top: -1px;
-  right: 12px;
-  transform: translateY(-50%);
-  background: var(--bg-2);
-  padding: 0 8px;
-  color: var(--ink-dim);
-  font-size: 10px;
-  letter-spacing: 0.25em;
-  font-family: inherit;
-}
-@keyframes rec-blink {
-  50% { opacity: 0.2; }
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") node.className = v;
+    else if (k === "html") node.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (v != null) node.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) {
+    if (c == null) continue;
+    node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return node;
 }
 
-.monitor-status {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--border-soft);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  color: var(--ink-faint);
-  background: var(--bg-3);
-}
-.monitor-status .dot {
-  display: inline-block;
-  width: 8px; height: 8px;
-  background: var(--phosphor);
-  border-radius: 50%;
-  margin-right: 6px;
-  box-shadow: 0 0 6px var(--phosphor);
+function renderRules(scene, state) {
+  // Stage B with rulebooks: each rulebook = a <details> dropdown.
+  // Player collects rulebooks by holding the corresponding items; each
+  // rulebook is collapsed by default and only expands when the player
+  // chooses to read it. Multiple rulebooks can coexist in the panel
+  // so the player can compare contradictory rules across identities.
+  const list = (scene.rules || scene.initialRules)
+    ? rulesFor(scene, state)
+    : state.rules.map((r, i) => ({ id: "L" + i, subject: "", text: r.text, book: "" }));
+
+  if (scene.rulebooks) {
+    // 把 rule 依 book 分群
+    const groups = {};
+    for (const bookName of Object.keys(scene.rulebooks)) {
+      groups[bookName] = list.filter((r) => r.book === bookName);
+    }
+    // 沒有 book 欄位的 rule (legacy) 歸到 "其他"
+    const orphans = list.filter((r) => !r.book);
+    if (orphans.length) groups["其他"] = orphans;
+
+    const wrap = el("div", { class: "rulebooks" });
+    for (const [bookName, rules] of Object.entries(groups)) {
+      if (!rules || rules.length === 0) continue;
+      // 計算這份守則單有幾條條件還沒過的 (顯示為「待解鎖」)
+      const lockedHint = rules.length === 0 ? "" : `（${rules.length} 條）`;
+      const details = el("details", { class: "rulebook" });
+      const summary = el("summary", { class: "rulebook-summary" }, [
+        el("span", { class: "rulebook-title" }, bookName),
+        el("span", { class: "rulebook-count" }, lockedHint),
+      ]);
+      details.appendChild(summary);
+      const ol = el("ol", { class: "rules" });
+      rules.forEach((rule, i) => {
+        ol.appendChild(el("li", { class: "rule" }, [
+          el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
+          el("span", { class: "rule-body" }, rule.text),
+        ]));
+      });
+      details.appendChild(ol);
+      wrap.appendChild(details);
+    }
+    if (!wrap.children.length) {
+      wrap.appendChild(el("p", { class: "rules-empty" }, "你目前還沒有拿到任何守則。"));
+    }
+    return wrap;
+  }
+
+  // Legacy scene: 單一 ol
+  const ol = el("ol", { class: "rules" });
+  list.forEach((rule, i) => {
+    ol.appendChild(el("li", { class: "rule" }, [
+      el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
+      el("span", { class: "rule-subject" }, rule.subject ? `${rule.subject}：` : ""),
+      el("span", { class: "rule-body" }, rule.text),
+    ]));
+  });
+  return ol;
 }
 
-/* ============== 三欄 grid ============== */
-.scene-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1.5fr 1fr;
-  gap: 1px;
-  background: var(--border-soft);
+export function renderScene(sceneId) {
+  const scene = scenes[sceneId];
+  if (!scene) {
+    appRoot().innerHTML = "";
+    appRoot().appendChild(el("div", { class: "scene-card" }, [
+      el("h1", {}, "找不到這個場所。"),
+      el("p", {}, "請從首頁重新選擇。"),
+    ]));
+    return;
+  }
+
+  let state = loadState(sceneId);
+  const fresh = !state;
+  if (fresh) {
+    const visitCount = (loadState(sceneId + ":visits") || 0) + 1;
+    // Use engine.freshState so the scene can opt in to either the legacy
+    // initialRules+triggers flow or the new applies-based rules system
+    // (initialItems / initialHotelView / initialLocation / initialUnlockedRuleIds).
+    state = freshState(scene);
+    state.startedAt = Date.now();
+    state.visitCount = visitCount;
+    state.time = scene.initialTime != null ? scene.initialTime : (state.time || 21 * 60);
+    // openingNarrative is layered on top if the scene supplies it and the
+    // fresh state didn't already include one
+    if (scene.openingNarrative && (!Array.isArray(state.narrative) || state.narrative.length === 0)) {
+      state.narrative = [{ time: state.time, kind: "narration", text: scene.openingNarrative }];
+    }
+    saveState(sceneId + ":visits", visitCount);
+    saveState(sceneId, state);
+  } else {
+    // Migration: older saved states were created before actions existed.
+    // Without this, the first onChoose call throws "Cannot read
+    // properties of undefined (reading 'lookDoor')" because the saved
+    // object literally has no .actions field. Patch in place and persist
+    // so we don't have to do this on every render.
+    if (!state.actions || typeof state.actions !== "object") {
+      state.actions = {};
+      saveState(sceneId, state);
+    }
+    if (!Array.isArray(state.narrative)) {
+      // Older saved states (pre 0a57dd0) don't have the narrative log;
+      // backfill it with the scene's openingNarrative so the new UI
+      // doesn't throw on `for (const entry of state.narrative)`.
+      state.narrative = scene.openingNarrative
+        ? [{ time: state.time || 21 * 60, kind: "narration", text: scene.openingNarrative }]
+        : [];
+      saveState(sceneId, state);
+    }
+    // New Stage B scenes: heldItems / hotelView / location / unlockedRuleIds
+    if (scene.rules) {
+      if (!Array.isArray(state.heldItems)) state.heldItems = scene.initialItems ? [...scene.initialItems] : [];
+      if (typeof state.hotelView !== "string") state.hotelView = scene.initialHotelView || "unknown";
+      if (typeof state.location !== "string") state.location = scene.initialLocation || "room-704";
+      if (!Array.isArray(state.unlockedRuleIds)) state.unlockedRuleIds = scene.initialUnlockedRuleIds ? [...scene.initialUnlockedRuleIds] : [];
+      saveState(sceneId, state);
+    }
+  }
+
+  // --- Idle time progression ---
+  // Real time advances whether the player is clicking or not. We compute
+  // the elapsed ms since the last render and convert that to game minutes
+  // (5 real seconds = 1 in-game minute, so 1 real minute = 12 minutes).
+  // This is the single thing that makes the scene actually playable: the
+  // player can sit and watch the rules change, or read a slow trigger, or
+  // just think — and the world keeps moving.
+  if (state.startedAt) {
+    const now = Date.now();
+    const lastTick = state._lastTickAt || state.startedAt;
+    const elapsedMs = now - lastTick;
+    if (elapsedMs >= 5000) {
+      const tickMinutes = Math.floor(elapsedMs / 5000);
+      const before = state.time;
+      // wraparound detection — same trick the engine uses for `time`
+      // arithmetic, mirrored here so trigger conditions that key off
+      // crossedMidnight work the same way for idle ticks.
+      const DAY = 24 * 60;
+      state.time = (state.time + tickMinutes) % DAY;
+      if (state.time < before) state.crossedMidnight = true;
+      // Mark the tick in the narrative stream so the player can see the
+      // world actually moved while they weren't pressing buttons.
+      narrate(state, `（時間過去了。房間的時鐘指向 ${formatTime(state.time)}。）`, "system");
+      state._lastTickAt = now;
+      saveState(sceneId, state);
+    }
+  }
+
+  const ctx = { scene, visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
+
+  function rerender() {
+    appRoot().innerHTML = "";
+
+    // 規則欄 (left on desktop, top on mobile)
+    const rulesCol = el("aside", { class: "col col-rules" });
+    rulesCol.appendChild(el("h2", { class: "col-title" }, "已知規則"));
+    if (state.visitCount > 1) {
+      rulesCol.appendChild(el("p", { class: "col-sub" },
+        `第 ${state.visitCount} 次入住`));
+    }
+    rulesCol.appendChild(renderRules(scene, state));
+
+    // 敘事欄 (center)
+    const narrCol = el("section", { class: "col col-narrative" });
+    narrCol.appendChild(el("h2", { class: "col-title" }, "此刻"));
+    const streamEl = el("div", { class: "narrative-stream", id: "narrative-stream" });
+    narrCol.appendChild(streamEl);
+    // 行動欄 (right on desktop, bottom on mobile)
+    const actCol = el("aside", { class: "col col-actions" });
+    actCol.appendChild(el("h2", { class: "col-title" }, "您可以"));
+    const ending = state.ended ? scene.endings.find((e) => e.id === state.ended) : null;
+    if (ending) {
+      actCol.appendChild(el("div", { class: "scene-end" }, [
+        el("div", { class: "stamp" }, ending.label),
+        el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); restart(); } },
+          el("button", { class: "restart" }, "重新入住")),
+      ]));
+    } else {
+      const actions = scene.actions(state, ctx);
+      if (actions && actions.length) {
+        const wrap = el("div", { class: "actions" });
+        for (const a of actions) {
+          wrap.appendChild(el("button", {
+            type: "button",
+            class: "action-btn",
+            "data-action": a.id,
+            onclick: (ev) => {
+              ev.preventDefault();
+              if (state.ended) return;
+              try {
+                if (!state.actions || typeof state.actions !== "object") {
+                  state.actions = {};
+                }
+                applyAction(scene, state, a.id, ctx);
+                saveState(sceneId, state);
+              } catch (err) {
+                console.error("[rule-horror] action failed", a.id, err);
+                renderError(err, a.id);
+                return;
+              }
+              rerender();
+              // type out the newest narrative line
+              const stream = document.getElementById("narrative-stream");
+              if (stream) stream.lastElementChild && stream.lastElementChild.classList.add("just-typed");
+            },
+          }, a.label));
+        }
+        actCol.appendChild(wrap);
+      }
+    }
+    // Reset button — wipes this scene's localStorage and re-renders fresh.
+    // Always visible so the player can bail out of a bad run, not just on
+    // the ending stamp.
+    actCol.appendChild(el("div", { class: "reset-block" }, [
+      el("button", {
+        type: "button",
+        class: "reset-btn",
+        title: "清除本關進度,從頭開始",
+        onclick: (ev) => {
+          ev.preventDefault();
+          if (confirm("確定要重置本關嗎?目前的進度會全部消失。")) {
+            clearState(sceneId);
+            location.hash = "";
+            location.reload();
+          }
+        },
+      }, "重置本關"),
+    ]));
+
+    // Append the grid BEFORE calling renderNarrativeStream so the
+    // narrator can find the stream element via document.getElementById
+    // (used by action-button onclick to add the .just-typed class).
+    // Bug: previously we called renderNarrativeStream while the grid was
+    // still detached, so getElementById returned null and the stream
+    // stayed empty.
+    const grid = el("div", { class: "scene-grid" }, [rulesCol, narrCol, actCol]);
+    appRoot().appendChild(grid);
+    renderNarrativeStream(streamEl, state);
+
+
+
+    // grid is appended in the narrative-column block above so the
+    // narrator can run immediately. Just scroll the stream to the
+    // bottom of the newest entry here.
+    const stream = document.getElementById("narrative-stream");
+    if (stream) stream.scrollTop = stream.scrollHeight;
+  }
+
+  function restart() { clearState(sceneId); renderScene(sceneId); }
+  rerender();
 }
 
-.col {
-  padding: 22px 22px 28px 22px;
-  background: var(--bg-2);
-  position: relative;
+function renderError(err, actionId) {
+  appRoot().innerHTML = "";
+  const card = el("div", { class: "scene-card" });
+  card.appendChild(el("h1", {}, "守則出差錯了"));
+  card.appendChild(el("p", { class: "scene-intro" },
+    actionId ? `剛才的動作「${actionId}」把守則弄亂了。請回到首頁重來。`
+             : "守則還沒準備好。請回到首頁重來。"));
+  const pre = el("pre", {},
+    String(err && err.stack || err));
+  pre.style.cssText = "white-space:pre-wrap;font-size:12px;color:var(--accent);padding:12px;border:1px dashed var(--accent-soft);background:rgba(110,31,31,0.05);";
+  card.appendChild(pre);
+  card.appendChild(el("button", {
+    class: "restart",
+    onclick: (ev) => { ev.preventDefault(); location.hash = ""; location.reload(); },
+  }, "返回首頁"));
+  appRoot().appendChild(card);
 }
 
-.col-title {
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: 0.4em;
-  color: var(--accent);
-  text-transform: uppercase;
-  margin: 0 0 18px 0;
-  padding: 6px 0 6px 10px;
-  border-left: 3px solid var(--accent);
-  background: linear-gradient(90deg, rgba(210,74,74,0.10), transparent 70%);
+function renderNarrativeStream(stream, state) {
+  if (!stream) return;
+  stream.innerHTML = "";
+  if (!Array.isArray(state.narrative)) state.narrative = [];
+  for (const entry of state.narrative) {
+    const row = el("div", { class: `narr-row kind-${entry.kind}` }, [
+      el("span", { class: "narr-time" }, formatTime(entry.time)),
+      el("span", { class: "narr-text" }, entry.text),
+    ]);
+    stream.appendChild(row);
+  }
 }
-.col-sub {
-  font-size: 11px;
-  color: var(--ink-dim);
-  margin: -10px 0 14px 0;
-  font-style: normal;
-  letter-spacing: 0.1em;
-}
-
-/* ============== 規則欄 — 老舊告示 / 傳真 ============== */
-ol.rules { list-style: none; padding: 0; margin: 0; counter-reset: rule; }
-ol.rules > li {
-  position: relative;
-  padding: 12px 0 12px 4.4em;
-  text-indent: 0;
-  border-bottom: 1px dashed var(--border);
-  min-height: 28px;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--ink);
-}
-ol.rules > li:last-child { border-bottom: none; }
-.rule-num {
-  position: absolute;
-  left: 0;
-  top: 12px;
-  display: inline-block;
-  width: 4em;
-  text-align: right;
-  padding-right: 0.7em;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  color: var(--amber);
-  font-family: "Courier New", ui-monospace, monospace;
-  white-space: nowrap;
-  font-weight: bold;
-}
-.rule-body { display: block; }
-li.inserted {
-  animation: insert 1.8s ease-out;
-  background: linear-gradient(90deg, rgba(210,74,74,0.18), transparent 75%);
-}
-@keyframes insert {
-  0% { background: rgba(210,74,74,0.32); transform: translateX(-8px); opacity: 0.3; }
-  60% { background: rgba(210,74,74,0.12); transform: translateX(0); opacity: 1; }
-  100% { background: transparent; opacity: 1; }
-}
-li.amended { color: var(--accent); }
-li.amended::after {
-  content: "  ◆ 此條已修訂";
-  display: inline;
-  font-size: 10px;
-  color: var(--accent);
-  margin-left: 8px;
-  letter-spacing: 0.2em;
-  font-weight: bold;
+export function renderIndex() {
+  appRoot().innerHTML = "";
+  const card = el("div", { class: "scene-card" });
+  card.appendChild(el("h1", {}, "規則怪談集"));
+  card.appendChild(el("p", { class: "scene-intro" },
+    "這些是從不同場所流出的守則。每一份都自稱能保護您。多數是真的。"));
+  const pick = el("div", { class: "scene-pick" });
+  for (const s of listScenes()) {
+    pick.appendChild(el("a", { href: "#" + s.id, onclick: (ev) => {
+      ev.preventDefault(); location.hash = s.id;
+    } }, [
+      el("span", { class: "name" }, s.title),
+      el("span", { class: "blurb" }, s.blurb || ""),
+    ]));
+  }
+  card.appendChild(pick);
+  card.appendChild(el("div", { class: "meta" }, "Rule Horror · Ciri784"));
+  appRoot().appendChild(card);
 }
 
-/* ============== 敘事欄 ============== */
-.narrative-stream {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 6px 4px 8px 0;
-}
-.narrative-stream::-webkit-scrollbar { width: 6px; }
-.narrative-stream::-webkit-scrollbar-thumb { background: var(--accent); }
-
-.narr-row {
-  display: grid;
-  grid-template-columns: 60px 1fr;
-  gap: 10px;
-  align-items: baseline;
-  font-size: 14px;
-  line-height: 1.75;
-  opacity: 0;
-  animation: fade-in 0.5s ease-out forwards;
-  border-left: 2px solid transparent;
-  padding-left: 8px;
-  margin-left: -10px;
-  color: var(--ink);
-}
-@keyframes fade-in {
-  to { opacity: 1; }
-}
-.narr-row.just-typed {
-  border-left-color: var(--accent);
-  background: linear-gradient(90deg, rgba(210,74,74,0.06), transparent 60%);
-}
-.narr-row.kind-rule-added {
-  color: var(--accent);
-  border-left-color: var(--accent);
-  font-weight: bold;
-}
-.narr-row.kind-rule-amended {
-  color: var(--amber);
-  border-left-color: var(--amber);
-  font-style: italic;
-}
-.narr-row.kind-ending {
-  border-top: 1px dashed var(--accent);
-  border-bottom: 1px dashed var(--accent);
-  padding: 16px 12px;
-  margin: 12px 0;
-  font-size: 15px;
-  color: var(--accent);
-  text-align: center;
-  white-space: normal;
-  font-weight: bold;
-  letter-spacing: 0.15em;
-  background: rgba(210,74,74,0.05);
-}
-.narr-time {
-  font-family: "Courier New", ui-monospace, monospace;
-  font-size: 11px;
-  color: var(--accent);
-  letter-spacing: 0.05em;
-  text-align: right;
-  font-weight: bold;
-}
-.narr-text { display: block; }
-
-.actions { display: flex; flex-direction: column; gap: 8px; }
-.rulebook {
-  /* 跟 .action-btn 對齊的視覺 */
-  display: block;
-  background: var(--bg-3);
-  color: var(--ink);
-  border: 1px solid var(--border);
-  padding: 0;
-  font-family: "Courier New", ui-monospace, "Source Han Serif TC", "Noto Serif TC", monospace, serif;
-  font-size: 13px;
-  transition: all 0.12s ease-out;
-  line-height: 1.55;
-  letter-spacing: 0.05em;
-  position: relative;
-}
-.rulebook[open] {
-  background: var(--bg);
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-.rulebook-summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  user-select: none;
-}
-.rulebook-summary::-webkit-details-marker { display: none; }
-.rulebook-summary::before {
-  content: "▸";
-  color: var(--accent);
-  font-weight: bold;
-  transition: transform 0.12s ease-out;
-}
-.rulebook[open] > .rulebook-summary::before {
-  transform: rotate(90deg);
-}
-.rulebook-title {
-  flex: 1;
-  font-weight: bold;
-}
-.rulebook-count {
-  font-size: 11px;
-  color: var(--ink-soft);
-  letter-spacing: 0.1em;
-}
-.rulebook[open] > .rulebook-summary {
-  color: var(--accent);
-  text-shadow: 0 0 4px rgba(210,74,74,0.6);
-}
-.rulebook .rules {
-  margin: 0;
-  padding: 0 14px 12px 36px;
-  list-style: none;
-  border-top: 1px dashed var(--border);
-  padding-top: 10px;
-}
-.rules-empty {
-  font-size: 12px;
-  color: var(--ink-soft);
-  padding: 14px;
-  border: 1px dashed var(--border);
-  background: var(--bg-3);
-  letter-spacing: 0.05em;
-}
-.rulebooks { display: flex; flex-direction: column; gap: 8px; }
-.action-btn {
-  appearance: none;
-  background: var(--bg-3);
-  color: var(--ink);
-  border: 1px solid var(--border);
-  padding: 12px 14px;
-  font-family: "Courier New", ui-monospace, "Source Han Serif TC", "Noto Serif TC", monospace, serif;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.12s ease-out;
-  line-height: 1.55;
-  letter-spacing: 0.05em;
-  position: relative;
-}
-.action-btn::before {
-  content: "▸";
-  color: var(--accent);
-  margin-right: 8px;
-  font-weight: bold;
-}
-.action-btn:hover {
-  background: var(--bg);
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  text-shadow: 0 0 4px rgba(210,74,74,0.6);
-}
-.action-btn:focus { outline: 1px dashed var(--accent); outline-offset: 2px; }
-.action-btn:active {
-  background: var(--accent);
-  color: var(--bg);
-  transform: none;
-  text-shadow: none;
-}
-.action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.action-btn:disabled::before { content: " "; }
-
-/* ============== 重置按鈕 ============== */
-.reset-block {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px dashed var(--border);
-  display: flex;
-  justify-content: center;
-}
-.reset-btn {
-  appearance: none;
-  background: transparent;
-  color: var(--ink-dim);
-  border: 1px dashed var(--ink-faint);
-  padding: 8px 18px;
-  font-family: "Courier New", ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.25em;
-  cursor: pointer;
-  text-transform: uppercase;
-  transition: all 0.15s ease-out;
-}
-.reset-btn:hover {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-  border-style: solid;
-  text-shadow: none;
-  box-shadow: 0 0 8px rgba(210,74,74,0.5);
-}
-.reset-btn:active { transform: none; }
-.reset-btn::before { content: "↻ "; }
-
-.meta {
-  margin-top: 24px;
-  font-size: 10px;
-  color: var(--ink-faint);
-  text-align: center;
-  letter-spacing: 0.2em;
-}
-
-/* ============== 結局 ============== */
-.scene-end { text-align: center; margin-top: 20px; }
-.scene-end .stamp {
-  display: inline-block;
-  border: 2px solid var(--accent);
-  color: var(--accent);
-  padding: 10px 22px;
-  font-family: "Courier New", ui-monospace, monospace;
-  font-size: 16px;
-  letter-spacing: 0.3em;
-  transform: rotate(-2deg);
-  margin-bottom: 18px;
-  font-weight: bold;
-  text-shadow: 0 0 6px rgba(210,74,74,0.5);
-  background: rgba(210,74,74,0.05);
-}
-.restart {
-  appearance: none;
-  background: transparent;
-  color: var(--ink);
-  border: 1px dashed var(--ink-faint);
-  padding: 8px 18px;
-  font-family: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-.restart:hover {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-  border-style: solid;
-}
-
-/* ============== 首頁 ============== */
-.scene-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 640px;
-  margin: 60px auto;
-  padding: 0 24px;
-}
-.scene-pick a {
-  display: block;
-  padding: 20px 22px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  text-decoration: none;
-  color: var(--ink);
-  transition: all 0.18s ease-out;
-  position: relative;
-}
-.scene-pick a::before {
-  content: "▸";
-  color: var(--accent);
-  margin-right: 10px;
-  font-weight: bold;
-}
-.scene-pick a:hover {
-  background: var(--bg-3);
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: inset 4px 0 0 var(--accent);
-  text-shadow: 0 0 4px rgba(210,74,74,0.4);
-}
-.scene-pick h2 {
-  margin: 0 0 6px 0;
-  font-size: 18px;
-  letter-spacing: 0.1em;
-  display: inline;
-}
-.scene-pick p { margin: 6px 0 0 0; color: var(--ink-dim); font-size: 12px; }
-.scene-pick a:hover p { color: var(--ink); }
-
-/* ============== Error ============== */
-pre {
-  white-space: pre-wrap;
-  font-size: 11px;
-  color: var(--accent);
-  padding: 12px;
-  border: 1px dashed var(--accent);
-  background: rgba(210,74,74,0.05);
-  font-family: "Courier New", ui-monospace, monospace;
-}
-
-/* ============== Mobile ============== */
-@media (max-width: 900px) {
-  .scene-grid { grid-template-columns: 1fr; }
-  .col { padding: 18px 16px 22px 16px; }
-  .col-actions { border-top: 1px solid var(--border); }
-  .col-narrative { order: 2; }
-  .col-rules { order: 1; }
-  .col-actions { order: 3; }
-  .monitor::before, .monitor::after { font-size: 9px; }
-  #app { padding: 8px; }
-}
-@media (max-width: 600px) {
-  body { font-size: 14px; }
-  .col { padding: 14px 12px; }
-  .col-title { font-size: 9px; letter-spacing: 0.3em; }
-  .narr-row { grid-template-columns: 50px 1fr; gap: 8px; font-size: 13px; }
-  .narr-time { font-size: 10px; }
-  .action-btn { font-size: 12px; padding: 10px 12px; }
-  .rulebook { font-size: 12px; }
-  .rulebook-summary { padding: 10px 12px; }
-  .monitor-status { font-size: 9px; padding: 6px 10px; }
-  .monitor-status span:nth-child(2) { display: none; }
+export function start() {
+  function route() {
+    const id = (location.hash || "").replace(/^#/, "");
+    if (id && scenes[id]) renderScene(id);
+    else renderIndex();
+  }
+  window.addEventListener("hashchange", route);
+  route();
 }

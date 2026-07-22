@@ -275,9 +275,6 @@ export function renderScene(sceneId) {
       }, "重置本關"),
     ]));
 
-    actCol.appendChild(el("div", { class: "meta" },
-      `場所版本 · ${state.visitCount}`));
-
     // Append the grid BEFORE calling renderNarrativeStream so the
     // narrator can find the stream element via document.getElementById
     // (used by action-button onclick to add the .just-typed class).

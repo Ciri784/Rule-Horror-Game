@@ -81,6 +81,31 @@ const RULES = {
   r20: { subject: "4 樓", book: "4 樓註記",
         text: "4F 沒有員工。4F 沒有監控。4F 沒有登記簿。",
         applies: (s) => s.heldItems.includes("floor-4-note") },
+  // === 矛盾守則 (rule horror 核心:同一身份守則之間直接打臉、玩家自己挑) ===
+  r21: { subject: "旅客", book: "旅客守則",
+        text: "12 點前入睡。",
+        applies: (s) => s.heldItems.includes("guest-card") && s.time >= 19 * 60 },
+  r22: { subject: "旅客", book: "旅客守則",
+        text: "聽見走廊有腳步聲、起床觀察。",
+        applies: (s) => s.heldItems.includes("guest-card") && s.location === "room-704" },
+  r23: { subject: "員工", book: "員工守則",
+        text: "巡邏時可以搭電梯。",
+        applies: (s) => s.heldItems.includes("staff-manual") && s.heldItems.includes("staff-card") },
+  r24: { subject: "員工", book: "員工守則",
+        text: "4F 巡邏時不可打開任何房門。",
+        applies: (s) => s.heldItems.includes("staff-manual") && s.heldItems.includes("staff-card") && s.location === "staff-corridor" },
+  r25: { subject: "員工", book: "夜班守則",
+        text: "如果 4F 電梯停了、上去查看。",
+        applies: (s) => s.heldItems.includes("shift-note") },
+  r26: { subject: "員工", book: "夜班守則",
+        text: "監視器黑屏時、不要回頭看。",
+        applies: (s) => s.heldItems.includes("shift-note") && s.location === "monitor-room" },
+  r27: { subject: "4 樓", book: "4 樓註記",
+        text: "4 樓的住客不會離開。",
+        applies: (s) => s.heldItems.includes("floor-4-note") },
+  r28: { subject: "4 樓", book: "4 樓註記",
+        text: "如果有人敲 704 的門、那是 4 樓的人。",
+        applies: (s) => s.heldItems.includes("floor-4-note") && s.location === "room-704" },
   // 旅客守則 — 開局解鎖
   r9: { subject: "旅客", book: "旅客守則",
         text: "房間裡的時鐘不一定準。",
@@ -168,7 +193,7 @@ function actions(state, ctx) {
                } else { c.narrate("枕頭下什麼都沒有。"); }
                // 撿到員工守則 = 員工守則解鎖 (r4, r5, r11, r12, r13)
                if (s.heldItems.includes("staff-manual")) {
-                 ["r4", "r5", "r11", "r12", "r13"].forEach((id) => {
+                 ["r4", "r5", "r11", "r12", "r13", "r23", "r24"].forEach((id) => {
                    if (!s.unlockedRuleIds.includes(id)) unlockRule(id, s, c);
                  });
                }
@@ -187,7 +212,7 @@ function actions(state, ctx) {
                } else { c.narrate("抽屜空空的。"); }
                // 撿到 4 樓註記 = 4 樓註記守則單解鎖 (r7, r8, r18, r19, r20)
                if (s.heldItems.includes("floor-4-note")) {
-                 ["r7", "r8", "r18", "r19", "r20"].forEach((id) => {
+                 ["r7", "r8", "r18", "r19", "r20", "r27", "r28"].forEach((id) => {
                    if (!s.unlockedRuleIds.includes(id)) unlockRule(id, s, c);
                  });
                }
@@ -223,8 +248,7 @@ function actions(state, ctx) {
 
 // Ending 定義
 const ENDINGS = [
-  { id: "checkout-passed", text: "你撐到了早上 6 點。飯店把你當成旅客，準時退房。",
-    when: (s) => s.time >= 6 * 60 && s.hotelView === "guest" },
+  // checkout-passed 拿掉 — 不再是自動通關。06:00 改用 narrative trigger (飯店敲門要求退房、玩家可以選擇要不要理)。
   { id: "claimed-by-clerk", text: "夜班櫃台員工站在你身後。你不記得是怎麼離開房間的。",
     when: (s) => s.hotelView === "intruder" && s.time >= 22 * 60 },
   { id: "room-consumed", text: "房間認得你。你也認得房間。",
@@ -238,7 +262,7 @@ export const hotel = {
   intro: "夜班。",
   openingNarrative: "夜裡十一點。你走進 704 號房、把行李放上床。\n櫃台遞房卡時順手塞了一張紙條：「旅客守則，入住前請過目。」",
   initialItems: ["guest-card"],
-  initialUnlockedRuleIds: ["r1", "r2", "r3", "r9", "r10"],
+  initialUnlockedRuleIds: ["r1", "r2", "r3", "r9", "r10", "r21", "r22"],
   initialHotelView: "guest",
   initialLocation: "room-704",
   initialTime: 23 * 60,  // 夜裡十一點 — 跟 openingNarrative 對齊
