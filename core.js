@@ -17,7 +17,7 @@
 import {
   loadState, saveState, clearState,
   narrate, evaluateTriggers, checkEndings, formatTime,
-  freshState, rulesFor, recomputeHotelView, applyAction,
+  freshState, rulesFor, applyAction,
 } from "./engine.js";
 
 const scenes = {};
