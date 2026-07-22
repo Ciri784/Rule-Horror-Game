@@ -17,6 +17,7 @@
 import {
   loadState, saveState, clearState,
   narrate, evaluateTriggers, checkEndings, formatTime,
+  freshState, rulesFor, recomputeHotelView, applyAction,
 } from "./engine.js";
 
 const scenes = {};
@@ -48,17 +49,20 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-function renderRules(state) {
+function renderRules(scene, state) {
   const ol = el("ol", { class: "rules" });
-  state.rules.forEach((rule, i) => {
-    const cls = ["rule"];
-    if (rule.inserted) cls.push("inserted");
-    if (rule.amended) cls.push("amended");
+  // New applies-based scenes: use rulesFor(scene, state) which filters
+  // unlocked + applies(). Falls back to legacy state.rules list otherwise.
+  const list = (scene.rules || scene.initialRules)
+    ? rulesFor(scene, state)
+    : state.rules.map((r, i) => ({ id: "L" + i, subject: "", text: r.text }));
+  list.forEach((rule, i) => {
     // Use real markup for the rule index, not a CSS pseudo-element.
     // CJK + monospace mixed metrics across iOS / Telegram WebView broke
     // the previous "content: '第 ' counter(rule) ' 條'" approach.
-    ol.appendChild(el("li", { class: cls.join(" ") }, [
+    ol.appendChild(el("li", { class: "rule" }, [
       el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
+      el("span", { class: "rule-subject" }, rule.subject ? `${rule.subject}：` : ""),
       el("span", { class: "rule-body" }, rule.text),
     ]));
   });
@@ -80,15 +84,18 @@ export function renderScene(sceneId) {
   const fresh = !state;
   if (fresh) {
     const visitCount = (loadState(sceneId + ":visits") || 0) + 1;
-    state = {
-      rules: scene.initialRules.map((t) => ({ text: t, inserted: false, amended: false })),
-      choices: [], fired: {},
-      actions: {}, // scene onChoose hooks write counters here; must exist or first click throws
-      startedAt: Date.now(), visitCount,
-      time: 21 * 60, // 21:00 as minutes-of-day, ticks +5 per action
-      checkOutPassed: false,
-      narrative: scene.openingNarrative ? [{ time: 21 * 60, kind: "narration", text: scene.openingNarrative }] : [],
-    };
+    // Use engine.freshState so the scene can opt in to either the legacy
+    // initialRules+triggers flow or the new applies-based rules system
+    // (initialItems / initialHotelView / initialLocation / initialUnlockedRuleIds).
+    state = freshState(scene);
+    state.startedAt = Date.now();
+    state.visitCount = visitCount;
+    state.time = scene.initialTime != null ? scene.initialTime : (state.time || 21 * 60);
+    // openingNarrative is layered on top if the scene supplies it and the
+    // fresh state didn't already include one
+    if (scene.openingNarrative && (!Array.isArray(state.narrative) || state.narrative.length === 0)) {
+      state.narrative = [{ time: state.time, kind: "narration", text: scene.openingNarrative }];
+    }
     saveState(sceneId + ":visits", visitCount);
     saveState(sceneId, state);
   } else {
@@ -106,8 +113,16 @@ export function renderScene(sceneId) {
       // backfill it with the scene's openingNarrative so the new UI
       // doesn't throw on `for (const entry of state.narrative)`.
       state.narrative = scene.openingNarrative
-        ? [{ time: 21 * 60, kind: "narration", text: scene.openingNarrative }]
+        ? [{ time: state.time || 21 * 60, kind: "narration", text: scene.openingNarrative }]
         : [];
+      saveState(sceneId, state);
+    }
+    // New Stage B scenes: heldItems / hotelView / location / unlockedRuleIds
+    if (scene.rules) {
+      if (!Array.isArray(state.heldItems)) state.heldItems = scene.initialItems ? [...scene.initialItems] : [];
+      if (typeof state.hotelView !== "string") state.hotelView = scene.initialHotelView || "unknown";
+      if (typeof state.location !== "string") state.location = scene.initialLocation || "room-704";
+      if (!Array.isArray(state.unlockedRuleIds)) state.unlockedRuleIds = scene.initialUnlockedRuleIds ? [...scene.initialUnlockedRuleIds] : [];
       saveState(sceneId, state);
     }
   }
@@ -140,7 +155,7 @@ export function renderScene(sceneId) {
     }
   }
 
-  const ctx = { visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
+  const ctx = { scene, visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
 
   function rerender() {
     appRoot().innerHTML = "";
@@ -152,7 +167,7 @@ export function renderScene(sceneId) {
       rulesCol.appendChild(el("p", { class: "col-sub" },
         `第 ${state.visitCount} 次入住`));
     }
-    rulesCol.appendChild(renderRules(state));
+    rulesCol.appendChild(renderRules(scene, state));
 
     // 敘事欄 (center)
     const narrCol = el("section", { class: "col col-narrative" });
@@ -187,9 +202,7 @@ export function renderScene(sceneId) {
                 if (!state.actions || typeof state.actions !== "object") {
                   state.actions = {};
                 }
-                a.onChoose(state, ctx);
-                evaluateTriggers(scene, state, ctx);
-                checkEndings(scene, state, ctx);
+                applyAction(scene, state, a.id, ctx);
                 saveState(sceneId, state);
               } catch (err) {
                 console.error("[rule-horror] action failed", a.id, err);

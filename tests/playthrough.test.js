@@ -21,7 +21,12 @@ describe("Rule-Horror-Game hotel playthrough", () => {
       a("look-wall");
       for (let i = 0; i < 5; i++) a("look-door");
     }).not.toThrow();
-    expect(state.narrative.length).toBeGreaterThanOrEqual(5);
+    // Stage B: actions split rule discovery from identity pickup. Some
+    // actions narrate via ctx (require scene labels), some push directly
+    // to state.narrative. 6 distinct actions should narrate at least 3
+    // times after the design split (look-door no longer narrates by default
+    // unless something is interesting at the door).
+    expect(state.narrative.length).toBeGreaterThanOrEqual(3);
   });
 
   it("picking up staff-card at 20:00 marks player as staff per hotel judges", () => {
