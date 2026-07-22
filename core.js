@@ -113,6 +113,16 @@ export function renderScene(sceneId) {
     };
     saveState(sceneId + ":visits", visitCount);
     saveState(sceneId, state);
+  } else {
+    // Migration: older saved states were created before actions existed.
+    // Without this, the first onChoose call throws "Cannot read
+    // properties of undefined (reading 'lookDoor')" because the saved
+    // object literally has no .actions field. Patch in place and persist
+    // so we don't have to do this on every render.
+    if (!state.actions || typeof state.actions !== "object") {
+      state.actions = {};
+      saveState(sceneId, state);
+    }
   }
 
   const ctx = { visitCount: state.visitCount, fresh };
@@ -149,6 +159,9 @@ export function renderScene(sceneId) {
               ev.preventDefault();
               if (state.ended) return;
               try {
+                if (!state.actions || typeof state.actions !== "object") {
+                  state.actions = {};
+                }
                 a.onChoose(state, ctx);
                 evaluateTriggers(scene, state, ctx);
                 checkEndings(scene, state, ctx);
