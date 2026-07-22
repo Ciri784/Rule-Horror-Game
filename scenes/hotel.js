@@ -20,6 +20,9 @@ const ITEMS = {
   "staff-card":   { label: "夜班員工證" },
   "room-key-704": { label: "704 號房鑰匙" },
   "master-key":   { label: "萬能鑰匙" },
+  "staff-manual":  { label: "員工手冊",   reveals: ["r4", "r5"] },
+  "shift-note":    { label: "夜班守則單", reveals: ["r6"] },
+  "floor-4-note":  { label: "4 樓註記",   reveals: ["r7", "r8"] },
 };
 
 // 守則 — 8 條固定寫死、applies 動態過濾
@@ -54,6 +57,23 @@ const HOTEL_JUDGES = [
 // 探索動作 — 6 個地點純按鈕
 function actions(state, ctx) {
   const at = (id) => state.location === id;
+  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
+  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
+  ctx.scene = ctx.scene || hotel;
+  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
+  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
+  ctx.scene = ctx.scene || hotel;
+  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
+  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
+  ctx.scene = ctx.scene || hotel;
+  // 讓 pickUp/moveTo 找得到中文 label、unlockRule 找得到 scene
+  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
+  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
+  ctx.scene = ctx.scene || hotel;
+  // 讓 pickUp/moveTo 找得到中文 label
+  ctx.itemLabels = ctx.itemLabels || Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.label]));
+  ctx.locationLabels = ctx.locationLabels || Object.fromEntries(Object.entries(LOCATIONS).map(([k, v]) => [k, v.label]));
+  ctx.scene = ctx.scene || hotel;
   const out = [];
   out.push({ id: "look-door", label: at("room-704") ? "看房門" : "看最近的門",
              hint: "門外是走廊。",
@@ -67,13 +87,18 @@ function actions(state, ctx) {
                c.narrate("電視只剩雪花。偶爾跳出一幀模糊的走廊畫面。");
                s.time += 5;
                if (!s.unlockedRuleIds.includes("r2")) unlockRule("r2", s, ctx);
+               if (!s.unlockedRuleIds.includes("r3")) unlockRule("r3", s, ctx);
              }});
   out.push({ id: "look-pillow", label: "翻枕頭下",
              hint: "枕頭下面藏了什麼？",
              onChoose: (s, c) => {
                if (!s.heldItems.includes("staff-card")) {
-                 pickUp("staff-card", s, c, "夜班員工證");
-                 if (!s.unlockedRuleIds.includes("r5")) unlockRule("r5", s, ctx);
+                 pickUp("staff-card", s, c);
+                 c.narrate("枕頭旁邊還壓著一本員工手冊。");
+                 if (!s.heldItems.includes("staff-manual")) pickUp("staff-manual", s, c);
+               } else if (!s.heldItems.includes("staff-manual")) {
+                 c.narrate("枕頭旁邊還壓著一本員工手冊。");
+                 pickUp("staff-manual", s, c);
                } else { c.narrate("枕頭下什麼都沒有。"); }
                s.time += 2;
              }});
@@ -81,8 +106,12 @@ function actions(state, ctx) {
              hint: "抽屜裡有什麼？",
              onChoose: (s, c) => {
                if (!s.heldItems.includes("room-key-704")) {
-                 pickUp("room-key-704", s, c, "704 號房鑰匙");
-                 if (!s.unlockedRuleIds.includes("r7")) unlockRule("r7", s, ctx);
+                 pickUp("room-key-704", s, c);
+                 c.narrate("抽屜底層壓著一張泛黃的 4 樓註記。");
+                 if (!s.heldItems.includes("floor-4-note")) pickUp("floor-4-note", s, c);
+               } else if (!s.heldItems.includes("floor-4-note")) {
+                 c.narrate("抽屜底層壓著一張泛黃的 4 樓註記。");
+                 pickUp("floor-4-note", s, c);
                } else { c.narrate("抽屜空空的。"); }
                s.time += 2;
              }});
@@ -92,14 +121,21 @@ function actions(state, ctx) {
                if (at("room-704")) {
                  c.narrate("窗外是停車場。但你沒看過 4 樓以下的窗。");
                  if (!s.unlockedRuleIds.includes("r7")) unlockRule("r7", s, ctx);
+                 if (!s.unlockedRuleIds.includes("r8")) unlockRule("r8", s, ctx);
                } else { c.narrate("窗外的城市不認識。"); }
                s.time += 3;
              }});
   out.push({ id: "look-wall", label: "看牆壁",
              hint: "牆上寫了什麼？",
              onChoose: (s, c) => {
-               if (at("room-704")) { c.narrate("牆角有抓痕。新鮮的。"); }
-               else { c.narrate("牆上沒有任何東西。"); }
+               if (at("room-704")) {
+                 c.narrate("牆角有抓痕。新鮮的。牆上貼著飯店的旅客守則單。");
+                 if (!s.unlockedRuleIds.includes("r1")) unlockRule("r1", s, ctx);
+               } else if (at("staff-corridor")) {
+                 c.narrate("牆上貼著一張夜班守則單。");
+                 if (!s.heldItems.includes("shift-note")) pickUp("shift-note", s, c);
+                 else if (!s.unlockedRuleIds.includes("r6")) unlockRule("r6", s, ctx);
+               } else { c.narrate("牆上沒有任何東西。"); }
                s.time += 2;
              }});
   return out;

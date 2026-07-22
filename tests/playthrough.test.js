@@ -4,7 +4,7 @@ import { hotel as hotelScene } from "../scenes/hotel.js";
 
 function newRun() {
   const state = freshState(hotelScene);
-  const ctx = { visitCount: 1, fresh: true, narrate: (t, k) => narrate(state, t, k) };
+  const ctx = { scene: hotelScene, visitCount: 1, fresh: true, narrate: (t, k) => narrate(state, t, k) };
   return { state, ctx };
 }
 

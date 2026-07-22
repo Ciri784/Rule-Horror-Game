@@ -8,7 +8,7 @@ import { hotel as hotelScene } from "../scenes/hotel.js";
 function boot(visitCount = 1) {
   const state = freshState(hotelScene, 1700000000000);
   state.visitCount = visitCount;
-  const ctx = { visitCount, fresh: true, narrate: (t, k) => narrate(state, t, k) };
+  const ctx = { scene: hotelScene, visitCount, fresh: true, narrate: (t, k) => narrate(state, t, k) };
   return { state, ctx };
 }
 
