@@ -50,16 +50,56 @@ function el(tag, props = {}, children = []) {
 }
 
 function renderRules(scene, state) {
-  const ol = el("ol", { class: "rules" });
-  // New applies-based scenes: use rulesFor(scene, state) which filters
-  // unlocked + applies(). Falls back to legacy state.rules list otherwise.
+  // Stage B with rulebooks: each rulebook = a <details> dropdown.
+  // Player collects rulebooks by holding the corresponding items; each
+  // rulebook is collapsed by default and only expands when the player
+  // chooses to read it. Multiple rulebooks can coexist in the panel
+  // so the player can compare contradictory rules across identities.
   const list = (scene.rules || scene.initialRules)
     ? rulesFor(scene, state)
-    : state.rules.map((r, i) => ({ id: "L" + i, subject: "", text: r.text }));
+    : state.rules.map((r, i) => ({ id: "L" + i, subject: "", text: r.text, book: "" }));
+
+  if (scene.rulebooks) {
+    // 把 rule 依 book 分群
+    const groups = {};
+    for (const bookName of Object.keys(scene.rulebooks)) {
+      groups[bookName] = list.filter((r) => r.book === bookName);
+    }
+    // 沒有 book 欄位的 rule (legacy) 歸到 "其他"
+    const orphans = list.filter((r) => !r.book);
+    if (orphans.length) groups["其他"] = orphans;
+
+    const wrap = el("div", { class: "rulebooks" });
+    for (const [bookName, rules] of Object.entries(groups)) {
+      if (!rules || rules.length === 0) continue;
+      // 計算這份守則單有幾條條件還沒過的 (顯示為「待解鎖」)
+      const lockedHint = rules.length === 0 ? "" : `（${rules.length} 條）`;
+      const details = el("details", { class: "rulebook" });
+      const summary = el("summary", { class: "rulebook-summary" }, [
+        el("span", { class: "rulebook-title" }, bookName),
+        el("span", { class: "rulebook-count" }, lockedHint),
+      ]);
+      details.appendChild(summary);
+      const ol = el("ol", { class: "rules" });
+      rules.forEach((rule, i) => {
+        ol.appendChild(el("li", { class: "rule" }, [
+          el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
+          el("span", { class: "rule-subject" }, rule.subject ? `${rule.subject}：` : ""),
+          el("span", { class: "rule-body" }, rule.text),
+        ]));
+      });
+      details.appendChild(ol);
+      wrap.appendChild(details);
+    }
+    if (!wrap.children.length) {
+      wrap.appendChild(el("p", { class: "rules-empty" }, "你目前還沒有拿到任何守則。"));
+    }
+    return wrap;
+  }
+
+  // Legacy scene: 單一 ol
+  const ol = el("ol", { class: "rules" });
   list.forEach((rule, i) => {
-    // Use real markup for the rule index, not a CSS pseudo-element.
-    // CJK + monospace mixed metrics across iOS / Telegram WebView broke
-    // the previous "content: '第 ' counter(rule) ' 條'" approach.
     ol.appendChild(el("li", { class: "rule" }, [
       el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
       el("span", { class: "rule-subject" }, rule.subject ? `${rule.subject}：` : ""),

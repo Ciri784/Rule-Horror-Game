@@ -25,38 +25,58 @@ const ITEMS = {
 };
 
 // 守則 — 8 條固定寫死、applies 動態過濾
+// 守則單 — 一份守則單 = 一個下拉欄、玩家可同時持有好幾份
+// 持有 = 持對應道具 (旅客守則單例外:持房卡就有)
+const RULEBOOKS = {
+  "旅客守則單":  { heldBy: ["guest-card"],  autoFromItem: "guest-card" },
+  "員工手冊":    { heldBy: ["staff-manual"] },
+  "夜班守則單":  { heldBy: ["shift-note"] },
+  "4 樓註記":    { heldBy: ["floor-4-note"] },
+};
+
 const RULES = {
-  // 旅客守則 — 只有在玩家被飯店當成旅客時(且還沒撿到員工證)才生效
-  r1: { subject: "旅客", text: "12 點後請勿離開房間。",
+  // 旅客守則單 — 持房卡就有
+  r1: { subject: "旅客", book: "旅客守則單",
+        text: "12 點後請勿離開房間。",
         applies: (s) => s.heldItems.includes("guest-card")
                      && !s.heldItems.includes("staff-card")
                      && s.location === "room-704"
                      && (s.time >= 19 * 60 || s.time < 6 * 60) },
-  r2: { subject: "旅客", text: "聽到敲門聲請勿回應。",
+  r2: { subject: "旅客", book: "旅客守則單",
+        text: "聽到敲門聲請勿回應。",
         applies: (s) => s.heldItems.includes("guest-card")
                      && !s.heldItems.includes("staff-card")
                      && s.location === "room-704" },
-  r3: { subject: "旅客", text: "房卡請隨身攜帶。",
+  r3: { subject: "旅客", book: "旅客守則單",
+        text: "房卡請隨身攜帶。",
         applies: (s) => s.heldItems.includes("guest-card")
                      && !s.heldItems.includes("staff-card") },
-  // 員工守則 — 只有在玩家被飯店當成員工時才生效
-  r4: { subject: "員工", text: "5 點前完成 4 樓房間巡邏。",
-        applies: (s) => s.heldItems.includes("staff-card")
+  // 員工手冊 — 撿到 staff-manual 解鎖
+  r4: { subject: "員工", book: "員工手冊",
+        text: "5 點前完成 4 樓房間巡邏。",
+        applies: (s) => s.heldItems.includes("staff-manual")
+                     && s.heldItems.includes("staff-card")
                      && s.hotelView === "staff"
                      && s.location === "staff-corridor" },
-  r5: { subject: "員工", text: "員工證請於 22:00 前繳回。",
-        applies: (s) => s.heldItems.includes("staff-card")
+  r5: { subject: "員工", book: "員工手冊",
+        text: "員工證請於 22:00 前繳回。",
+        applies: (s) => s.heldItems.includes("staff-manual")
+                     && s.heldItems.includes("staff-card")
                      && s.hotelView === "staff"
                      && s.time >= 18 * 60 && s.time < 22 * 60 },
-  r6: { subject: "員工", text: "監控室僅限值班員工進入。",
-        applies: (s) => s.heldItems.includes("staff-card")
+  // 夜班守則單 — 撿到 shift-note 解鎖
+  r6: { subject: "員工", book: "夜班守則單",
+        text: "監控室僅限值班員工進入。",
+        applies: (s) => s.heldItems.includes("shift-note")
                      && (s.hotelView === "staff" || s.hotelView === "intruder") },
-  // 4 樓守則 — 持 room-key-704 的人才看得到
-  r7: { subject: "4 樓", text: "4 樓不存在。",
-        applies: (s) => s.heldItems.includes("room-key-704")
+  // 4 樓註記 — 撿到 floor-4-note 解鎖
+  r7: { subject: "4 樓", book: "4 樓註記",
+        text: "4 樓不存在。",
+        applies: (s) => s.heldItems.includes("floor-4-note")
                      && s.location === "room-704" },
-  r8: { subject: "4 樓", text: "凌晨 3 點到 4 點請保持清醒。",
-        applies: (s) => s.heldItems.includes("room-key-704")
+  r8: { subject: "4 樓", book: "4 樓註記",
+        text: "凌晨 3 點到 4 點請保持清醒。",
+        applies: (s) => s.heldItems.includes("floor-4-note")
                      && s.location === "room-704"
                      && s.time >= 3 * 60 && s.time < 4 * 60 },
 };
@@ -105,6 +125,11 @@ function actions(state, ctx) {
                  c.narrate("枕頭旁邊還壓著一本員工手冊。");
                  pickUp("staff-manual", s, c);
                } else { c.narrate("枕頭下什麼都沒有。"); }
+               // 撿到員工手冊 = 員工手冊守則單解鎖
+               if (s.heldItems.includes("staff-manual")) {
+                 if (!s.unlockedRuleIds.includes("r4")) unlockRule("r4", s, c);
+                 if (!s.unlockedRuleIds.includes("r5")) unlockRule("r5", s, c);
+               }
                s.time += 2;
              }});
   out.push({ id: "look-nightstand", label: "翻床頭櫃",
@@ -118,6 +143,11 @@ function actions(state, ctx) {
                  c.narrate("抽屜底層壓著一張泛黃的 4 樓註記。");
                  pickUp("floor-4-note", s, c);
                } else { c.narrate("抽屜空空的。"); }
+               // 撿到 4 樓註記 = 4 樓註記守則單解鎖
+               if (s.heldItems.includes("floor-4-note")) {
+                 if (!s.unlockedRuleIds.includes("r7")) unlockRule("r7", s, c);
+                 if (!s.unlockedRuleIds.includes("r8")) unlockRule("r8", s, c);
+               }
                s.time += 2;
              }});
   out.push({ id: "look-window", label: "看窗外",
@@ -169,6 +199,7 @@ export const hotel = {
   initialHotelView: "guest",
   initialLocation: "room-704",
   rules: RULES,
+  rulebooks: RULEBOOKS,
   hotelJudges: HOTEL_JUDGES,
   actions,
   endings: ENDINGS,
