@@ -3,12 +3,12 @@ import {
   freshState, evaluateTriggers, checkEndings, formatTime, narrate, applyAction,
   rulesFor, pickUp, moveTo, unlockRule, recomputeHotelView,
 } from "../engine.js";
-import { hotel as hotelScene } from "../scenes/hotel.js";
+import { hotel as hotel } from "../scenes/hotel.js";
 
 function boot(visitCount = 1) {
-  const state = freshState(hotelScene, 1700000000000);
+  const state = freshState(hotel, 1700000000000);
   state.visitCount = visitCount;
-  const ctx = { scene: hotelScene, visitCount, fresh: true, narrate: (t, k) => narrate(state, t, k) };
+  const ctx = { scene: hotel, visitCount, fresh: true, narrate: (t, k) => narrate(state, t, k) };
   return { state, ctx };
 }
 
@@ -36,39 +36,39 @@ describe("new applies-based system", () => {
   });
   it("rulesFor returns only rules that are unlocked AND pass applies()", () => {
     const { state } = boot();
-    expect(rulesFor(hotelScene, state)).toHaveLength(0);
-    unlockRule("r1", state, hotelScene);
-    expect(rulesFor(hotelScene, state)).toHaveLength(1);
+    expect(rulesFor(hotel, state)).toHaveLength(0);
+    unlockRule("r1", state, hotel);
+    expect(rulesFor(hotel, state)).toHaveLength(1);
     state.location = "lobby";
-    expect(rulesFor(hotelScene, state)).toHaveLength(0);
+    expect(rulesFor(hotel, state)).toHaveLength(0);
   });
   it("pickUp adds item, narrates, and triggers hotelView recompute", () => {
     const { state } = boot();
-    expect(pickUp("staff-card", state, hotelScene)).toBe(true);
+    expect(pickUp("staff-card", state, hotel)).toBe(true);
     expect(state.heldItems).toContain("staff-card");
-    expect(pickUp("staff-card", state, hotelScene)).toBe(false);
+    expect(pickUp("staff-card", state, hotel)).toBe(false);
   });
 });
 
 describe("hotel judges — time-based view", () => {
   it("staff-card at 20:00 → hotelView = staff", () => {
     const { state } = boot();
-    pickUp("staff-card", state, hotelScene);
+    pickUp("staff-card", state, hotel);
     state.time = 20 * 60;
-    evaluateTriggers(hotelScene, state, { narrate: () => {} });
+    evaluateTriggers(hotel, state, { narrate: () => {} });
     expect(state.hotelView).toBe("staff");
   });
   it("staff-card at 23:00 → hotelView = intruder (expired)", () => {
     const { state } = boot();
-    pickUp("staff-card", state, hotelScene);
+    pickUp("staff-card", state, hotel);
     state.time = 23 * 60;
-    evaluateTriggers(hotelScene, state, { narrate: () => {} });
+    evaluateTriggers(hotel, state, { narrate: () => {} });
     expect(state.hotelView).toBe("intruder");
   });
   it("guest-card in room-704 → hotelView = guest", () => {
     const { state } = boot();
     state.time = 22 * 60;
-    evaluateTriggers(hotelScene, state, { narrate: () => {} });
+    evaluateTriggers(hotel, state, { narrate: () => {} });
     expect(state.hotelView).toBe("guest");
   });
 });
@@ -78,14 +78,14 @@ describe("endings", () => {
     const { state } = boot();
     pretendNextMorning(state, 6, 0);
     state.hotelView = "guest";
-    const e = checkEndings(hotelScene, state, { narrate: () => {} });
+    const e = checkEndings(hotel, state, { narrate: () => {} });
     expect(e && e.id).toBe("checkout-passed");
   });
   it("claimed-by-clerk fires if hotelView = intruder past 22:00", () => {
     const { state } = boot();
     state.hotelView = "intruder";
     state.time = 23 * 60;
-    const e = checkEndings(hotelScene, state, { narrate: () => {} });
+    const e = checkEndings(hotel, state, { narrate: () => {} });
     expect(e && e.id).toBe("claimed-by-clerk");
   });
 });
@@ -93,13 +93,13 @@ describe("endings", () => {
 describe("applyAction", () => {
   it("throws on unknown action id", () => {
     const { state, ctx } = boot();
-    expect(() => applyAction(hotelScene, state, "nope", ctx)).toThrow();
+    expect(() => applyAction(hotel, state, "nope", ctx)).toThrow();
   });
   it("does nothing after state.ended is set", () => {
     const { state, ctx } = boot();
     state.ended = "checkout-passed";
     const before = state.narrative.length;
-    const e = applyAction(hotelScene, state, "look-door", ctx);
+    const e = applyAction(hotel, state, "look-door", ctx);
     expect(e && e.id).toBe("checkout-passed");
     expect(state.narrative.length).toBe(before);
   });
