@@ -79,12 +79,20 @@ describe("hotel judges — time-based view", () => {
 
 describe("endings", () => {
   // checkout-passed ending 拿掉 — 改用 narrative trigger (飯店敲門要退房), 不再自動通關
-  it("claimed-by-clerk fires if hotelView = intruder past 22:00", () => {
+  // claimed-by-clerk 改嚴: 23:00 才觸發
+  it("claimed-by-clerk fires if hotelView = intruder past 23:00", () => {
     const { state } = boot();
     state.hotelView = "intruder";
     state.time = 23 * 60;
     const e = checkEndings(hotel, state, { narrate: () => {} });
     expect(e && e.id).toBe("claimed-by-clerk");
+  });
+  it("claimed-by-clerk does NOT fire at 22:59", () => {
+    const { state } = boot();
+    state.hotelView = "intruder";
+    state.time = 22 * 60 + 59;
+    const e = checkEndings(hotel, state, { narrate: () => {} });
+    expect(e).toBeNull();
   });
   it("claimed-by-clerk fires if hotelView = intruder past 22:00", () => {
     const { state } = boot();

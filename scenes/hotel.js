@@ -249,10 +249,17 @@ function actions(state, ctx) {
 // Ending 定義
 const ENDINGS = [
   // checkout-passed 拿掉 — 不再是自動通關。06:00 改用 narrative trigger (飯店敲門要求退房、玩家可以選擇要不要理)。
+  // claimed-by-clerk 改嚴: 23:00 才觸發 (撐到深夜才會被櫃台員工收走)
   { id: "claimed-by-clerk", text: "夜班櫃台員工站在你身後。你不記得是怎麼離開房間的。",
-    when: (s) => s.hotelView === "intruder" && s.time >= 22 * 60 },
+    when: (s) => s.hotelView === "intruder" && s.time >= 23 * 60 },
+  // room-consumed 改嚴: 04:30-05:00 (原本 03:00 直接觸發太容易) + 撿過 floor-4-note + narrative 有 4 樓相關 + intruder/unknown view
   { id: "room-consumed", text: "房間認得你。你也認得房間。",
-    when: (s) => s.heldItems.includes("room-key-704") && s.time >= 3 * 60 && s.location === "room-704" && (s.hotelView === "intruder" || s.hotelView === "unknown") },
+    when: (s) => s.heldItems.includes("room-key-704")
+              && s.time >= 4 * 60 + 30 && s.time < 5 * 60
+              && s.location === "room-704"
+              && (s.hotelView === "intruder" || s.hotelView === "unknown")
+              && s.heldItems.includes("floor-4-note")
+              && s.narrative.some((n) => n.text && n.text.includes("4 樓")) },
 ];
 
 export const hotel = {
