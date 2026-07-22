@@ -84,7 +84,6 @@ function renderRules(scene, state) {
       rules.forEach((rule, i) => {
         ol.appendChild(el("li", { class: "rule" }, [
           el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
-          el("span", { class: "rule-subject" }, rule.subject ? `${rule.subject}：` : ""),
           el("span", { class: "rule-body" }, rule.text),
         ]));
       });
