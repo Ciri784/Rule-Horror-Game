@@ -202,7 +202,7 @@ export function renderScene(sceneId) {
 
     // 規則欄 (left on desktop, top on mobile)
     const rulesCol = el("aside", { class: "col col-rules" });
-    rulesCol.appendChild(el("h2", { class: "col-title" }, "已有規則"));
+    rulesCol.appendChild(el("h2", { class: "col-title" }, "已知規則"));
     if (state.visitCount > 1) {
       rulesCol.appendChild(el("p", { class: "col-sub" },
         `第 ${state.visitCount} 次入住`));
