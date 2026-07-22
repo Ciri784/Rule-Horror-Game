@@ -310,6 +310,38 @@ li.amended::after {
 .action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .action-btn:disabled::before { content: " "; }
 
+/* ============== 重置按鈕 ============== */
+.reset-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  justify-content: center;
+}
+.reset-btn {
+  appearance: none;
+  background: transparent;
+  color: var(--ink-dim);
+  border: 1px dashed var(--ink-faint);
+  padding: 8px 18px;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s ease-out;
+}
+.reset-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  border-style: solid;
+  text-shadow: none;
+  box-shadow: 0 0 8px rgba(210,74,74,0.5);
+}
+.reset-btn:active { transform: none; }
+.reset-btn::before { content: "↻ "; }
+
 .meta {
   margin-top: 24px;
   font-size: 10px;

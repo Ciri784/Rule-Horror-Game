@@ -206,6 +206,25 @@ export function renderScene(sceneId) {
         actCol.appendChild(wrap);
       }
     }
+    // Reset button — wipes this scene's localStorage and re-renders fresh.
+    // Always visible so the player can bail out of a bad run, not just on
+    // the ending stamp.
+    actCol.appendChild(el("div", { class: "reset-block" }, [
+      el("button", {
+        type: "button",
+        class: "reset-btn",
+        title: "清除本關進度,從頭開始",
+        onclick: (ev) => {
+          ev.preventDefault();
+          if (confirm("確定要重置本關嗎?目前的進度會全部消失。")) {
+            clearState(sceneId);
+            location.hash = "";
+            location.reload();
+          }
+        },
+      }, "重置本關"),
+    ]));
+
     actCol.appendChild(el("div", { class: "meta" },
       `場所版本 · ${state.visitCount}`));
 
