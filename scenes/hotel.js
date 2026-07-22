@@ -79,6 +79,64 @@ const RULES = {
         applies: (s) => s.heldItems.includes("floor-4-note")
                      && s.location === "room-704"
                      && s.time >= 3 * 60 && s.time < 4 * 60 },
+  r18: { subject: "4 樓", book: "4 樓註記",
+        text: "4F 的房間號碼是 7XX 開頭。但 X 會換。",
+        applies: (s) => s.heldItems.includes("floor-4-note")
+                     && s.location === "room-704" },
+  r19: { subject: "4 樓", book: "4 樓註記",
+        text: "凌晨 3 點以後、不要打開房門。",
+        applies: (s) => s.heldItems.includes("floor-4-note")
+                     && s.location === "room-704"
+                     && s.time >= 3 * 60 },
+  r20: { subject: "4 樓", book: "4 樓註記",
+        text: "4F 沒有員工。4F 沒有監控。4F 沒有登記簿。",
+        applies: (s) => s.heldItems.includes("floor-4-note") },
+  // 旅客守則單 — 開局解鎖
+  r9: { subject: "旅客", book: "旅客守則單",
+        text: "房間裡的時鐘不一定準。",
+        applies: (s) => s.heldItems.includes("guest-card")
+                     && !s.heldItems.includes("staff-card")
+                     && s.location === "room-704" },
+  r10: { subject: "旅客", book: "旅客守則單",
+        text: "不要試圖從窗戶確認自己在幾樓。",
+        applies: (s) => s.heldItems.includes("guest-card")
+                     && !s.heldItems.includes("staff-card")
+                     && s.location === "room-704" },
+  // 員工手冊 — 撿到 staff-manual 解鎖
+  r11: { subject: "員工", book: "員工手冊",
+        text: "巡邏時不可搭電梯。",
+        applies: (s) => s.heldItems.includes("staff-manual")
+                     && s.heldItems.includes("staff-card")
+                     && s.hotelView === "staff" },
+  r12: { subject: "員工", book: "員工手冊",
+        text: "4F 巡邏完必須搭 3F 樓梯下來。",
+        applies: (s) => s.heldItems.includes("staff-manual")
+                     && s.heldItems.includes("staff-card")
+                     && s.hotelView === "staff"
+                     && s.location === "staff-corridor" },
+  r13: { subject: "員工", book: "員工手冊",
+        text: "遇到旅客時不要直視他的眼睛。",
+        applies: (s) => s.heldItems.includes("staff-manual")
+                     && s.heldItems.includes("staff-card")
+                     && s.hotelView === "staff" },
+  // 夜班守則單 — 撿到 shift-note 解鎖
+  r14: { subject: "員工", book: "夜班守則單",
+        text: "02:00 必須關閉所有大廳燈。",
+        applies: (s) => s.heldItems.includes("shift-note")
+                     && s.location === "lobby"
+                     && s.time >= 2 * 60 && s.time < 3 * 60 },
+  r15: { subject: "員工", book: "夜班守則單",
+        text: "電梯不會停在 4F。如果停了、報修。",
+        applies: (s) => s.heldItems.includes("shift-note") },
+  r16: { subject: "員工", book: "夜班守則單",
+        text: "監視器每隔 15 分鐘會黑屏 3 秒。屬正常現象。",
+        applies: (s) => s.heldItems.includes("shift-note")
+                     && s.location === "monitor-room" },
+  r17: { subject: "員工", book: "夜班守則單",
+        text: "員工證若在 22:00 後未繳回、飯店會自己來收。",
+        applies: (s) => s.heldItems.includes("shift-note")
+                     && s.heldItems.includes("staff-card")
+                     && s.time >= 22 * 60 },
 };
 
 // 飯店判斷準則 — 按順序評估、第一個 when 通過的 view 勝出
@@ -125,10 +183,11 @@ function actions(state, ctx) {
                  c.narrate("枕頭旁邊還壓著一本員工手冊。");
                  pickUp("staff-manual", s, c);
                } else { c.narrate("枕頭下什麼都沒有。"); }
-               // 撿到員工手冊 = 員工手冊守則單解鎖
+               // 撿到員工手冊 = 員工手冊守則單解鎖 (r4, r5, r11, r12, r13)
                if (s.heldItems.includes("staff-manual")) {
-                 if (!s.unlockedRuleIds.includes("r4")) unlockRule("r4", s, c);
-                 if (!s.unlockedRuleIds.includes("r5")) unlockRule("r5", s, c);
+                 ["r4", "r5", "r11", "r12", "r13"].forEach((id) => {
+                   if (!s.unlockedRuleIds.includes(id)) unlockRule(id, s, c);
+                 });
                }
                s.time += 2;
              }});
@@ -143,10 +202,11 @@ function actions(state, ctx) {
                  c.narrate("抽屜底層壓著一張泛黃的 4 樓註記。");
                  pickUp("floor-4-note", s, c);
                } else { c.narrate("抽屜空空的。"); }
-               // 撿到 4 樓註記 = 4 樓註記守則單解鎖
+               // 撿到 4 樓註記 = 4 樓註記守則單解鎖 (r7, r8, r18, r19, r20)
                if (s.heldItems.includes("floor-4-note")) {
-                 if (!s.unlockedRuleIds.includes("r7")) unlockRule("r7", s, c);
-                 if (!s.unlockedRuleIds.includes("r8")) unlockRule("r8", s, c);
+                 ["r7", "r8", "r18", "r19", "r20"].forEach((id) => {
+                   if (!s.unlockedRuleIds.includes(id)) unlockRule(id, s, c);
+                 });
                }
                s.time += 2;
              }});
@@ -195,7 +255,7 @@ export const hotel = {
   intro: "夜班。",
   openingNarrative: "夜裡十一點。你走進 704 號房、把行李放上床。\n櫃台遞房卡時順手塞了一張紙條：「旅客守則，入住前請過目。」",
   initialItems: ["guest-card"],
-  initialUnlockedRuleIds: ["r1", "r2", "r3"],
+  initialUnlockedRuleIds: ["r1", "r2", "r3", "r9", "r10"],
   initialHotelView: "guest",
   initialLocation: "room-704",
   rules: RULES,

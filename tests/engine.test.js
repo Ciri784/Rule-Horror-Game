@@ -32,15 +32,16 @@ describe("new applies-based system", () => {
     expect(state.heldItems).toEqual(["guest-card"]);
     expect(state.hotelView).toBe("guest");
     expect(state.location).toBe("room-704");
-    expect(state.unlockedRuleIds).toEqual(["r1", "r2", "r3"]);
+    expect(state.unlockedRuleIds).toEqual(["r1", "r2", "r3", "r9", "r10"]);
   });
   it("rulesFor returns only rules that are unlocked AND pass applies()", () => {
     const { state } = boot();
     // Stage B with default scene: r1, r2, r3 are pre-unlocked
     // (旅客卡 + 已在 room-704 + 旅館視角) all pass applies() at boot.
-    expect(rulesFor(hotel, state)).toHaveLength(3);
-    unlockRule("r4", state, hotel);  // r4 需 staff-card,不該進入
-    expect(rulesFor(hotel, state)).toHaveLength(3);
+    // 開局 5 條旅客守則 (r1, r2, r3, r9, r10)
+    expect(rulesFor(hotel, state)).toHaveLength(5);
+    unlockRule("r4", state, hotel);  // r4 需 staff-manual,不該進入
+    expect(rulesFor(hotel, state)).toHaveLength(5);
     state.location = "lobby";
     state.heldItems = [];  // 離開旅館、繳回房卡
     expect(rulesFor(hotel, state)).toHaveLength(0);
