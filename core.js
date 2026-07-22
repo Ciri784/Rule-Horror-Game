@@ -139,6 +139,15 @@ export function renderScene(sceneId) {
       state.actions = {};
       saveState(sceneId, state);
     }
+    if (!Array.isArray(state.narrative)) {
+      // Older saved states (pre 0a57dd0) don't have the narrative log;
+      // backfill it with the scene's openingNarrative so the new UI
+      // doesn't throw on `for (const entry of state.narrative)`.
+      state.narrative = scene.openingNarrative
+        ? [{ time: 21 * 60, kind: "narration", text: scene.openingNarrative }]
+        : [];
+      saveState(sceneId, state);
+    }
   }
 
   const ctx = { visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
@@ -251,6 +260,7 @@ function renderNarrativeStream(state) {
   const stream = document.getElementById("narrative-stream");
   if (!stream) return;
   stream.innerHTML = "";
+  if (!Array.isArray(state.narrative)) state.narrative = [];
   for (const entry of state.narrative) {
     const row = el("div", { class: `narr-row kind-${entry.kind}` }, [
       el("span", { class: "narr-time" }, formatTime(entry.time)),
