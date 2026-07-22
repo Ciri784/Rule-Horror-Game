@@ -39,12 +39,12 @@ export function freshState(scene, now = Date.now()) {
     choices: [], fired: {},
     actions: {},
     startedAt: now, visitCount,
-    time: 21 * 60,
+    time: 23 * 60,
     crossedMidnight: false,
-    _lastTime: 21 * 60,
+    _lastTime: 23 * 60,
     checkOutPassed: false,
     narrative: scene.openingNarrative
-      ? [{ time: 21 * 60, kind: "narration", text: scene.openingNarrative }]
+      ? [{ time: 23 * 60, kind: "narration", text: scene.openingNarrative }]
       : [],
 
     // — new state shape for the applies-based system —

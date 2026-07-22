@@ -129,7 +129,7 @@ export function renderScene(sceneId) {
     state = freshState(scene);
     state.startedAt = Date.now();
     state.visitCount = visitCount;
-    state.time = scene.initialTime != null ? scene.initialTime : (state.time || 21 * 60);
+    state.time = scene.initialTime != null ? scene.initialTime : (state.time || 23 * 60);
     // openingNarrative is layered on top if the scene supplies it and the
     // fresh state didn't already include one
     if (scene.openingNarrative && (!Array.isArray(state.narrative) || state.narrative.length === 0)) {
@@ -152,7 +152,7 @@ export function renderScene(sceneId) {
       // backfill it with the scene's openingNarrative so the new UI
       // doesn't throw on `for (const entry of state.narrative)`.
       state.narrative = scene.openingNarrative
-        ? [{ time: state.time || 21 * 60, kind: "narration", text: scene.openingNarrative }]
+        ? [{ time: state.time || 23 * 60, kind: "narration", text: scene.openingNarrative }]
         : [];
       saveState(sceneId, state);
     }
