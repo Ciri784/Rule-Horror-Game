@@ -48,7 +48,11 @@ html, body {
 
 .col-rules { border-right: 1px solid rgba(74,68,60,0.18); background: var(--paper-2); }
 .col-narrative { background: var(--paper); }
-.col-actions { border-left: 1px solid rgba(74,68,60,0.18); background: var(--paper-2); }
+.col-actions { border-left: 1px solid var(--ink); background: var(--ink); color: var(--paper); }
+.col-actions .col-title { color: rgba(239,231,214,0.6); border-bottom-color: rgba(239,231,214,0.3); }
+.col-actions .col-sub { color: rgba(239,231,214,0.5); }
+.col-actions .clock { color: var(--paper); border-color: rgba(239,231,214,0.35); }
+.col-actions .meta { color: rgba(239,231,214,0.45); }
 
 .col-title {
   font-size: 13px;
@@ -117,11 +121,8 @@ li.amended::after {
 .narrative-stream {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-height: calc(100vh - 140px);
-  overflow-y: auto;
-  padding-right: 8px;
-  scroll-behavior: smooth;
+  gap: 22px;
+  padding: 4px 12px 4px 0;
 }
 .narrative-stream::-webkit-scrollbar { width: 6px; }
 .narrative-stream::-webkit-scrollbar-thumb { background: rgba(74,68,60,0.25); border-radius: 3px; }
@@ -203,27 +204,29 @@ li.amended::after {
 }
 .action-btn {
   appearance: none;
-  background: var(--paper);
+  background: #fffaf0;
   color: var(--ink);
-  border: 1px solid rgba(74,68,60,0.4);
-  padding: 12px 16px;
+  border: 1px solid var(--ink);
+  padding: 13px 16px;
   font-family: inherit;
   font-size: 15px;
   text-align: left;
   cursor: pointer;
-  transition: all 0.15s ease-out;
-  line-height: 1.5;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out;
+  line-height: 1.55;
+  box-shadow: 0 1px 0 var(--ink);
 }
 .action-btn:hover {
-  background: var(--ink);
-  color: var(--paper);
-  transform: translateX(-3px);
+  background: var(--paper);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: none;
 }
 .action-btn:focus {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.action-btn:active { transform: translateX(-1px) scale(0.99); }
+.action-btn:active { transform: none; background: var(--accent); color: #fffaf0; }
 .action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
