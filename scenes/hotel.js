@@ -14,6 +14,19 @@ const LOCATIONS = {
   "monitor-room":   { label: "監控室" },
 };
 
+// 移動圖 — 依所在地決定能去哪。need/needAny 是通行所需的持有物。
+// 這是整個遊戲的移動系統:沒有它、玩家永遠卡在 704,一半的場所與
+// 「夜班守則」整本都到不了。離開 704 會讓飯店把旅客視為 intruder
+// (見 HOTEL_JUDGES),所以探索本身就是 rule-horror 的風險。
+const MOVES = {
+  "room-704":       [{ to: "lobby",          label: "走出房間、下樓到大廳" }],
+  "lobby":          [{ to: "room-704",       label: "回 704 號房" },
+                     { to: "staff-corridor", label: "刷員工證進員工通道", need: "staff-card" }],
+  "staff-corridor": [{ to: "lobby",          label: "回一樓大廳" },
+                     { to: "monitor-room",   label: "進監控室", needAny: ["shift-note", "staff-card"] }],
+  "monitor-room":   [{ to: "staff-corridor", label: "回員工通道" }],
+};
+
 // 道具定義 — 玩家撿到就以為自己是什麼
 const ITEMS = {
   "guest-card":   { label: "旅客房卡" },
@@ -239,25 +252,47 @@ function actions(state, ctx) {
                } else if (at("staff-corridor")) {
                  c.narrate("牆上貼著一張夜班守則。");
                  if (!s.heldItems.includes("shift-note")) pickUp("shift-note", s, c);
-                 else if (!s.unlockedRuleIds.includes("r6")) unlockRule("r6", s, ctx);
+                 // 撿到夜班守則 = 「夜班守則」整本解鎖 (r6, r14–r17, r25, r26)。
+                 // 舊版只在第二次看牆才解鎖 r6、其餘永遠鎖著,整本內容是死的。
+                 ["r6", "r14", "r15", "r16", "r17", "r25", "r26"].forEach((id) => {
+                   if (!s.unlockedRuleIds.includes(id)) unlockRule(id, s, c);
+                 });
                } else { c.narrate("牆上沒有任何東西。"); }
                s.time += 2;
              }});
+
+  // 移動動作 — 依所在地與持有物品開放。moveTo 會敘事並重算 hotelView。
+  for (const mv of (MOVES[state.location] || [])) {
+    if (mv.need && !state.heldItems.includes(mv.need)) continue;
+    if (mv.needAny && !mv.needAny.some((it) => state.heldItems.includes(it))) continue;
+    out.push({ id: "go-" + mv.to, label: mv.label,
+               onChoose: (s, c) => {
+                 moveTo(c.scene, s, mv.to, LOCATIONS[mv.to].label);
+                 s.time += 2;
+               }});
+  }
   return out;
 }
 
 // Ending 定義
 const ENDINGS = [
-  // checkout-passed 拿掉 — 不再是自動通關。06:00 改用 narrative trigger (飯店敲門要求退房、玩家可以選擇要不要理)。
-  // claimed-by-clerk 改嚴: 23:00 才觸發 (撐到深夜才會被櫃台員工收走)
+  // claimed-by-clerk — 身份不符 (intruder) 被夜班櫃台收走。
+  // 關鍵修正:舊版門檻是 time >= 23:00,但遊戲「就是 23:00 開場」,等於
+  // 一撿到員工證變成 intruder 的同一個 click 就結束 (開場即死)。
+  // 改成 crossedMidnight:午夜前 intruder 只是警訊、有一段緩衝可以趕回
+  // 704 恢復旅客身份;撐不過午夜還是 intruder 才會被收走。緩衝窗口讓
+  // 「探索」變得可玩,也是 rule-horror 該有的倒數壓力。
   { id: "claimed-by-clerk", text: "夜班櫃台員工站在你身後。你不記得是怎麼離開房間的。",
-    when: (s) => s.hotelView === "intruder" && s.time >= 23 * 60 },
-  // room-consumed 改嚴: 04:30-05:00 (原本 03:00 直接觸發太容易) + 撿過 floor-4-note + narrative 有 4 樓相關 + intruder/unknown view
+    when: (s) => s.hotelView === "intruder" && s.crossedMidnight === true },
+  // room-consumed — 乖乖待在 704 卻讀了 4 樓註記的好奇旅客,天亮前被房間吞掉。
+  // 修正:舊版要求 view 為 intruder/unknown,但凌晨還活著待在 704 的人
+  // 必然是 guest (持房卡在 704),於是這個結局永遠觸發不到。改成放行
+  // guest,讓「安靜的旅客」路線真的有結局。
   { id: "room-consumed", text: "房間認得你。你也認得房間。",
     when: (s) => s.heldItems.includes("room-key-704")
               && s.time >= 4 * 60 + 30 && s.time < 5 * 60
               && s.location === "room-704"
-              && (s.hotelView === "intruder" || s.hotelView === "unknown")
+              && ["guest", "intruder", "unknown"].includes(s.hotelView)
               && s.heldItems.includes("floor-4-note")
               && s.narrative.some((n) => n.text && n.text.includes("4 樓")) },
 ];

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   freshState, evaluateTriggers, checkEndings, formatTime, narrate, applyAction,
-  rulesFor, pickUp, moveTo, unlockRule, recomputeHotelView,
+  rulesFor, pickUp, moveTo, unlockRule,
 } from "../engine.js";
 import { hotel as hotel } from "../scenes/hotel.js";
 
@@ -78,28 +78,33 @@ describe("hotel judges — time-based view", () => {
 });
 
 describe("endings", () => {
-  // checkout-passed ending 拿掉 — 改用 narrative trigger (飯店敲門要退房), 不再自動通關
-  // claimed-by-clerk 改嚴: 23:00 才觸發
-  it("claimed-by-clerk fires if hotelView = intruder past 23:00", () => {
+  // claimed-by-clerk 現在以「撐不過午夜」為門檻 (crossedMidnight),不是
+  // 開場的 23:00 時鐘。這正是「開場即死」的修正:午夜前變成 intruder
+  // 只是警訊、還有機會趕回 704 恢復身份。
+  it("claimed-by-clerk fires if hotelView = intruder AND crossed midnight", () => {
     const { state } = boot();
     state.hotelView = "intruder";
-    state.time = 23 * 60;
+    state.crossedMidnight = true;
+    state.time = 30;  // 00:30
     const e = checkEndings(hotel, state, { narrate: () => {} });
     expect(e && e.id).toBe("claimed-by-clerk");
   });
-  it("claimed-by-clerk does NOT fire at 22:59", () => {
+  it("claimed-by-clerk does NOT fire before midnight even if intruder", () => {
     const { state } = boot();
     state.hotelView = "intruder";
-    state.time = 22 * 60 + 59;
+    state.crossedMidnight = false;
+    state.time = 23 * 60 + 30;  // 23:30, 開場後不久
     const e = checkEndings(hotel, state, { narrate: () => {} });
     expect(e).toBeNull();
   });
-  it("claimed-by-clerk fires if hotelView = intruder past 22:00", () => {
+  it("claimed-by-clerk does NOT fire at 23:00 spawn (regression: 開場即死)", () => {
+    // 全新遊戲: 23:00, crossedMidnight 尚未發生 → 不該有任何結局
     const { state } = boot();
-    state.hotelView = "intruder";
+    state.hotelView = "intruder";  // 就算已被判 intruder
     state.time = 23 * 60;
+    // crossedMidnight 預設 false
     const e = checkEndings(hotel, state, { narrate: () => {} });
-    expect(e && e.id).toBe("claimed-by-clerk");
+    expect(e).toBeNull();
   });
 });
 

@@ -2,7 +2,7 @@
 // scene ends, then print the full state + every trigger / narrative
 // entry. Goal: surface any state where the game "can't be played".
 import { freshState, evaluateTriggers, checkEndings, applyAction, narrate, formatTime } from "../engine.js";
-import { hotelScene } from "../scenes/hotel.js";
+import { hotel as hotelScene } from "../scenes/hotel.js";
 
 const state = freshState(hotelScene);
 const ctx = { visitCount: 1, fresh: true, narrate: (t, k) => narrate(state, t, k) };
