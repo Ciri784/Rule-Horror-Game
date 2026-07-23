@@ -10,9 +10,13 @@ it usually rewrites the rulebook — including rewriting itself.
 
 ## Current scenes
 
-- **旅客守則** — A nameless hotel, seven floors, an elevator that only goes to
-  the sixth. You have a key on a hook behind the door. You have a TV stuck on
-  channel 7. You have time. That is about all you have.
+- **深夜飯店** — A nameless hotel with no fourth floor: the elevator skips
+  from 3 to 5. You check into room 602 at eleven at night; your keycard says
+  602, and that is the one number you can trust. The missing floor comes back
+  after dark, wearing 7-hundred numbers, and 704 is the room on it. Keep your
+  door reading 602 until morning. Four rulebooks — guest, staff, night-shift,
+  and the floor's own — each swear they protect you, and they contradict each
+  other on purpose.
 
 ## Run locally
 

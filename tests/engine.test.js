@@ -1,22 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
   freshState, evaluateTriggers, checkEndings, formatTime, narrate, applyAction,
-  rulesFor, pickUp, moveTo, unlockRule,
+  rulesFor, pickUp,
 } from "../engine.js";
-import { hotel as hotel } from "../scenes/hotel.js";
+import { hotel } from "../scenes/hotel.js";
 
-function boot(visitCount = 1) {
+function boot() {
   const state = freshState(hotel, 1700000000000);
-  state.visitCount = visitCount;
-  const ctx = { scene: hotel, visitCount, fresh: true, narrate: (t, k) => narrate(state, t, k) };
+  state.time = hotel.initialTime;
+  const ctx = { scene: hotel, visitCount: 1, fresh: true, narrate: (t, k) => narrate(state, t, k) };
   return { state, ctx };
 }
-
-function pretendNextMorning(state, h = 10, m = 0) {
-  state.crossedMidnight = true;
-  state.time = h * 60 + m;
-  state._lastTime = state.time;
-}
+const silent = { narrate: () => {} };
 
 describe("engine basics", () => {
   it("formatTime pads and wraps at 24h", () => {
@@ -26,85 +21,97 @@ describe("engine basics", () => {
   });
 });
 
-describe("new applies-based system", () => {
-  it("freshState seeds heldItems, hotelView, location, unlockedRuleIds", () => {
+describe("fresh state", () => {
+  it("starts in room 602 as a guest holding only the house rulebook", () => {
     const { state } = boot();
     expect(state.heldItems).toEqual(["guest-card"]);
     expect(state.hotelView).toBe("guest");
-    expect(state.location).toBe("room-704");
-    expect(state.unlockedRuleIds).toEqual(["r1", "r2", "r3", "r9", "r10", "r21", "r22"]);
+    expect(state.location).toBe("my-room");
+    expect(state.doorNumber).toBe("602");
+    expect(state.drift).toBe(0);
+    expect(state.unlockedRuleIds).toContain("rg1");
   });
-  it("rulesFor returns only rules that are unlocked AND pass applies()", () => {
+  it("only 房客守則 is in effect at boot; the other books are locked", () => {
     const { state } = boot();
-    // Stage B with default scene: r1, r2, r3 are pre-unlocked
-    // (旅客卡 + 已在 room-704 + 旅館視角) all pass applies() at boot.
-    // 開局 5 條旅客守則 (r1, r2, r3, r9, r10)
-    expect(rulesFor(hotel, state)).toHaveLength(7);  // r1, r2, r3, r9, r10, r21, r22
-    unlockRule("r4", state, hotel);  // r4 需 staff-manual,不該進入
-    expect(rulesFor(hotel, state)).toHaveLength(7);
-    state.location = "lobby";
-    state.heldItems = [];  // 離開旅館、繳回房卡
-    expect(rulesFor(hotel, state)).toHaveLength(0);
-  });
-  it("pickUp adds item, narrates, and triggers hotelView recompute", () => {
-    const { state } = boot();
-    expect(pickUp("staff-card", state, hotel)).toBe(true);
-    expect(state.heldItems).toContain("staff-card");
-    expect(pickUp("staff-card", state, hotel)).toBe(false);
+    const books = [...new Set(rulesFor(hotel, state).map((r) => r.book))];
+    expect(books).toEqual(["房客守則"]);
   });
 });
 
-describe("hotel judges — time-based view", () => {
-  it("staff-card at 20:00 → hotelView = staff", () => {
+describe("door drift", () => {
+  it("door holds at 602 below the flip threshold and turns 704 at it", () => {
     const { state } = boot();
-    pickUp("staff-card", state, hotel);
-    state.time = 20 * 60;
-    evaluateTriggers(hotel, state, { narrate: () => {} });
-    expect(state.hotelView).toBe("staff");
+    state.drift = 2;
+    evaluateTriggers(hotel, state, silent);
+    expect(state.doorNumber).toBe("602");
+    state.drift = 3;
+    evaluateTriggers(hotel, state, silent);
+    expect(state.doorNumber).toBe("704");
   });
-  it("staff-card at 23:00 → hotelView = intruder (expired)", () => {
+  it("the flip is one-way: dropping drift does not restore 602", () => {
+    const { state } = boot();
+    state.drift = 3;
+    evaluateTriggers(hotel, state, silent);
+    expect(state.doorNumber).toBe("704");
+    state.drift = 0;
+    evaluateTriggers(hotel, state, silent);
+    expect(state.doorNumber).toBe("704");
+  });
+});
+
+describe("hotel judges — identity", () => {
+  it("guest-card in my-room → guest", () => {
+    const { state } = boot();
+    state.time = 22 * 60;
+    evaluateTriggers(hotel, state, silent);
+    expect(state.hotelView).toBe("guest");
+  });
+  it("guest-card outside my-room → intruder", () => {
+    const { state } = boot();
+    state.location = "lobby";
+    evaluateTriggers(hotel, state, silent);
+    expect(state.hotelView).toBe("intruder");
+  });
+  it("expired staff-card at 23:00 → intruder", () => {
     const { state } = boot();
     pickUp("staff-card", state, hotel);
     state.time = 23 * 60;
-    evaluateTriggers(hotel, state, { narrate: () => {} });
+    evaluateTriggers(hotel, state, silent);
     expect(state.hotelView).toBe("intruder");
   });
-  it("guest-card in room-704 → hotelView = guest", () => {
+  it("valid staff-card at 20:00 → staff", () => {
     const { state } = boot();
-    state.time = 22 * 60;
-    evaluateTriggers(hotel, state, { narrate: () => {} });
-    expect(state.hotelView).toBe("guest");
+    pickUp("staff-card", state, hotel);
+    state.time = 20 * 60;
+    evaluateTriggers(hotel, state, silent);
+    expect(state.hotelView).toBe("staff");
   });
 });
 
 describe("endings", () => {
-  // claimed-by-clerk 現在以「撐不過午夜」為門檻 (crossedMidnight),不是
-  // 開場的 23:00 時鐘。這正是「開場即死」的修正:午夜前變成 intruder
-  // 只是警訊、還有機會趕回 704 恢復身份。
-  it("claimed-by-clerk fires if hotelView = intruder AND crossed midnight", () => {
+  it("resident fires when the door has turned 704 in your room past midnight", () => {
+    const { state } = boot();
+    state.doorNumber = "704";
+    state.location = "my-room";
+    state.crossedMidnight = true;
+    expect(checkEndings(hotel, state, silent).id).toBe("resident");
+  });
+  it("claimed-by-clerk fires for an intruder past midnight", () => {
     const { state } = boot();
     state.hotelView = "intruder";
     state.crossedMidnight = true;
-    state.time = 30;  // 00:30
-    const e = checkEndings(hotel, state, { narrate: () => {} });
-    expect(e && e.id).toBe("claimed-by-clerk");
+    state.time = 30;
+    expect(checkEndings(hotel, state, silent).id).toBe("claimed-by-clerk");
   });
-  it("claimed-by-clerk does NOT fire before midnight even if intruder", () => {
+  it("checked-out fires for a guest still in 602 at dawn", () => {
     const { state } = boot();
-    state.hotelView = "intruder";
-    state.crossedMidnight = false;
-    state.time = 23 * 60 + 30;  // 23:30, 開場後不久
-    const e = checkEndings(hotel, state, { narrate: () => {} });
-    expect(e).toBeNull();
+    state.crossedMidnight = true;
+    state.time = 6 * 60;
+    expect(checkEndings(hotel, state, silent).id).toBe("checked-out");
   });
-  it("claimed-by-clerk does NOT fire at 23:00 spawn (regression: 開場即死)", () => {
-    // 全新遊戲: 23:00, crossedMidnight 尚未發生 → 不該有任何結局
+  it("nothing ends at the 23:00 spawn (regression: 開場即死)", () => {
     const { state } = boot();
-    state.hotelView = "intruder";  // 就算已被判 intruder
-    state.time = 23 * 60;
-    // crossedMidnight 預設 false
-    const e = checkEndings(hotel, state, { narrate: () => {} });
-    expect(e).toBeNull();
+    expect(checkEndings(hotel, state, silent)).toBeNull();
   });
 });
 
@@ -115,10 +122,9 @@ describe("applyAction", () => {
   });
   it("does nothing after state.ended is set", () => {
     const { state, ctx } = boot();
-    state.ended = "claimed-by-clerk";
+    state.ended = "resident";
     const before = state.narrative.length;
-    const e = applyAction(hotel, state, "look-door", ctx);
-    expect(e && e.id).toBe("claimed-by-clerk");
+    applyAction(hotel, state, "look-door", ctx);
     expect(state.narrative.length).toBe(before);
   });
 });

@@ -91,7 +91,7 @@ function renderRules(scene, state) {
       wrap.appendChild(details);
     }
     if (!wrap.children.length) {
-      wrap.appendChild(el("p", { class: "rules-empty" }, "你目前還沒有拿到任何守則。"));
+      wrap.appendChild(el("p", { class: "rules-empty" }, "您目前還沒有拿到任何守則。"));
     }
     return wrap;
   }
@@ -160,8 +160,10 @@ export function renderScene(sceneId) {
     if (scene.rules) {
       if (!Array.isArray(state.heldItems)) state.heldItems = scene.initialItems ? [...scene.initialItems] : [];
       if (typeof state.hotelView !== "string") state.hotelView = scene.initialHotelView || "unknown";
-      if (typeof state.location !== "string") state.location = scene.initialLocation || "room-704";
+      if (typeof state.location !== "string") state.location = scene.initialLocation || "my-room";
       if (!Array.isArray(state.unlockedRuleIds)) state.unlockedRuleIds = scene.initialUnlockedRuleIds ? [...scene.initialUnlockedRuleIds] : [];
+      if (typeof state.doorNumber === "undefined") state.doorNumber = scene.initialDoorNumber || null;
+      if (typeof state.drift !== "number") state.drift = 0;
       saveState(sceneId, state);
     }
   }

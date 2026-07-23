@@ -1,115 +1,90 @@
 import { describe, it, expect } from "vitest";
-import { freshState, applyAction, narrate, formatTime } from "../engine.js";
-import { hotel as hotel } from "../scenes/hotel.js";
+import { freshState, applyAction, narrate } from "../engine.js";
+import { hotel } from "../scenes/hotel.js";
 
 function newRun() {
   const state = freshState(hotel);
+  state.time = hotel.initialTime;
   const ctx = { scene: hotel, visitCount: 1, fresh: true, narrate: (t, k) => narrate(state, t, k) };
   return { state, ctx };
 }
+const ids = (s, ctx) => hotel.actions(s, ctx).map((a) => a.id);
+const can = (s, ctx, id) => ids(s, ctx).includes(id);
+const act = (s, ctx, id) => applyAction(hotel, s, id, ctx);
 
-describe("Rule-Horror-Game hotel playthrough", () => {
-  it("survives a full run picking up items, exploring, and reaching an ending without throwing", () => {
+describe("深夜飯店 playthrough", () => {
+  // 回歸: 開場即死。 舊版一撿員工證就結束。
+  it("does not end within the first several clicks (no instant death)", () => {
     const { state, ctx } = newRun();
-    const a = (id) => applyAction(hotel, state, id, ctx);
-    expect(() => {
-      a("look-door");
-      a("watch-tv");
-      a("look-pillow");
-      a("look-nightstand");
-      a("look-window");
-      a("look-wall");
-      for (let i = 0; i < 5; i++) a("look-door");
-    }).not.toThrow();
-    // Stage B: actions split rule discovery from identity pickup. Some
-    // actions narrate via ctx (require scene labels), some push directly
-    // to state.narrative. 6 distinct actions should narrate at least 3
-    // times after the design split (look-door no longer narrates by default
-    // unless something is interesting at the door).
-    expect(state.narrative.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("picking up staff-card at 20:00 marks player as staff per hotel judges", () => {
-    const { state, ctx } = newRun();
-    state.time = 20 * 60;
-    applyAction(hotel, state, "look-pillow", ctx);
-    expect(state.heldItems).toContain("staff-card");
-    expect(state.hotelView).toBe("staff");
-  });
-
-  it("picking up staff-card at 23:00 marks player as intruder (expired)", () => {
-    const { state, ctx } = newRun();
-    state.time = 23 * 60;
-    applyAction(hotel, state, "look-pillow", ctx);
-    expect(state.heldItems).toContain("staff-card");
-    expect(state.hotelView).toBe("intruder");
-  });
-
-  it("every action in the scene is reachable and callable without throwing", () => {
-    const { state, ctx } = newRun();
-    for (const a of hotel.actions(state, ctx)) {
-      expect(() => applyAction(hotel, state, a.id, ctx)).not.toThrow();
-    }
-  });
-
-  // === 回歸: 開場即死 ===
-  // 舊 bug: 遊戲 23:00 開場、claimed-by-clerk 門檻是 time>=23:00,一撿
-  // 員工證 (枕頭下,遊戲主動引導) 就在同一個 click 觸發結局。
-  it("does NOT end within the first several clicks (no instant death)", () => {
-    const { state, ctx } = newRun();
-    const clicks = ["look-door", "watch-tv", "look-pillow", "look-nightstand", "look-window", "look-wall"];
-    for (const id of clicks) {
-      const avail = hotel.actions(state, ctx).some((a) => a.id === id);
-      if (avail) applyAction(hotel, state, id, ctx);
+    for (const id of ["look-card", "look-door", "watch-tv", "look-nightstand", "look-pillow", "look-window"]) {
+      if (can(state, ctx, id)) act(state, ctx, id);
       expect(state.ended, `game ended too early after ${id}`).toBeFalsy();
     }
   });
 
-  // === 回歸: 沒有移動系統 ===
-  // 舊 bug: actions() 從不呼叫 moveTo,玩家永遠卡在 704,員工通道/監控室
-  // 到不了、「夜班守則」整本 (shift-note) 永遠拿不到。
-  it("player can move out of 704, reach the staff corridor, and obtain 夜班守則", () => {
+  it("all four rulebooks are obtainable through play", () => {
     const { state, ctx } = newRun();
-    // 先在房間撿到員工證 (進員工通道的通行證)
-    applyAction(hotel, state, "look-pillow", ctx);
-    expect(state.heldItems).toContain("staff-card");
-    // 下樓 → 進員工通道
-    const hasMove = (id) => hotel.actions(state, ctx).some((a) => a.id === id);
-    expect(hasMove("go-lobby")).toBe(true);
-    applyAction(hotel, state, "go-lobby", ctx);
-    expect(state.location).toBe("lobby");
-    expect(hasMove("go-staff-corridor")).toBe(true);
-    applyAction(hotel, state, "go-staff-corridor", ctx);
-    expect(state.location).toBe("staff-corridor");
-    // 員工通道看牆 → 撿到夜班守則、整本解鎖
-    applyAction(hotel, state, "look-wall", ctx);
+    expect(state.unlockedRuleIds).toContain("rg1");            // 房客: 開場就有
+    act(state, ctx, "look-pillow");                            // 員工: 枕頭下
+    expect(state.unlockedRuleIds).toContain("re1");
+    act(state, ctx, "go-lobby");                               // 午夜前探索,安全
+    act(state, ctx, "go-staff");
+    act(state, ctx, "look-wall");                              // 夜班: 員工通道牆
     expect(state.heldItems).toContain("shift-note");
-    for (const id of ["r6", "r14", "r15", "r16", "r17", "r25", "r26"]) {
-      expect(state.unlockedRuleIds, `夜班守則 ${id} not unlocked`).toContain(id);
-    }
-    // 監控室現在可達
-    expect(hasMove("go-monitor-room")).toBe(true);
+    expect(state.unlockedRuleIds).toContain("rn1");
+    // 704 註記: 房間偏移成 704 後,門縫下才出現
+    act(state, ctx, "go-lobby");
+    act(state, ctx, "go-room");
+    state.drift = 3;                                           // 偏移到門牌翻 704
+    act(state, ctx, "look-door");                              // 觸發 recompute → doorNumber 704
+    expect(state.doorNumber).toBe("704");
+    expect(can(state, ctx, "take-note")).toBe(true);
+    act(state, ctx, "take-note");
+    expect(state.unlockedRuleIds).toContain("rf1");
   });
 
-  // === 回歸: 兩個結局都要真的到得了 ===
-  it("claimed-by-clerk is reachable: intruder who does not get back before midnight", () => {
+  it("GOOD ending: the careful guest who stays put reaches dawn", () => {
     const { state, ctx } = newRun();
-    applyAction(hotel, state, "look-pillow", ctx);   // 員工證 → intruder (23:xx)
-    expect(state.hotelView).toBe("intruder");
-    expect(state.ended).toBeFalsy();                 // 但午夜前不死
-    state.time = 30;                                 // 時間走到 00:30
-    applyAction(hotel, state, "look-door", ctx);     // 跨過午夜後任一動作
+    act(state, ctx, "look-card");
+    expect(state.drift).toBe(0);
+    state.crossedMidnight = true;
+    state.time = 6 * 60;                                       // 閒置到天亮,一直待在房裡
+    act(state, ctx, "look-door");
+    expect(state.ended).toBe("checked-out");
+    expect(state.doorNumber).toBe("602");
+  });
+
+  it("BAD ending (resident): in-room drift turns the door to 704 and the room takes you", () => {
+    const { state, ctx } = newRun();
+    state.crossedMidnight = true;
+    act(state, ctx, "look-nightstand");                        // 704 鑰匙, drift 1
+    act(state, ctx, "watch-tv");                               // 7 台
+    act(state, ctx, "tv-off");
+    act(state, ctx, "watch-tv");                               // 重開, drift 2
+    act(state, ctx, "tv-off");
+    act(state, ctx, "watch-tv");                               // 重開, drift 3 → 門牌翻 704
+    expect(state.ended).toBe("resident");
+  });
+
+  it("BAD ending (clerk): wandering out of your room past midnight gets you claimed", () => {
+    const { state, ctx } = newRun();
+    state.crossedMidnight = true;
+    act(state, ctx, "go-lobby");                               // 半夜離開 → intruder → 被收走
     expect(state.ended).toBe("claimed-by-clerk");
   });
 
-  it("room-consumed is reachable: the quiet guest who reads the 4F note", () => {
+  it("staying in your room past midnight, unbothered, is safe (no premature end)", () => {
     const { state, ctx } = newRun();
-    applyAction(hotel, state, "look-nightstand", ctx); // room-key + floor-4-note (+敘事提到 4 樓)
-    expect(state.heldItems).toContain("floor-4-note");
-    expect(state.hotelView).toBe("guest");             // 沒碰員工證、留在 704 = 仍是旅客
-    state.time = 4 * 60 + 30;                          // 凌晨 04:30
     state.crossedMidnight = true;
-    applyAction(hotel, state, "look-wall", ctx);
-    expect(state.ended).toBe("room-consumed");
+    state.time = 2 * 60;
+    for (let i = 0; i < 3; i++) { act(state, ctx, "look-card"); act(state, ctx, "look-door"); }
+    expect(state.ended).toBeFalsy();
+  });
+
+  it("every action offered at spawn is callable without throwing", () => {
+    const { state, ctx } = newRun();
+    for (const a of hotel.actions(state, ctx)) {
+      expect(() => applyAction(hotel, state, a.id, ctx)).not.toThrow();
+    }
   });
 });

@@ -66,6 +66,15 @@ export function freshState(scene, now = Date.now()) {
     unlockedRuleIds: scene.initialUnlockedRuleIds
       ? [...scene.initialUnlockedRuleIds]
       : [],
+
+    // — door/drift model (深夜飯店) —
+    // The number on the player's own door. Starts as their real room number
+    // and can be rewritten to the hidden-floor number as `drift` accrues.
+    // Scenes without a door model simply never read these.
+    doorNumber: scene.initialDoorNumber || null,
+    // How many transgressions the player has committed. Scene logic (via
+    // scene.recomputeDoor) decides when accumulated drift rewrites the door.
+    drift: 0,
   };
 }
 
@@ -120,6 +129,11 @@ export function evaluateTriggers(scene, state, ctx) {
   // Recompute the hotel's view of the player before any rules fire,
   // so applies() predicates see the current view.
   recomputeHotelView(scene, state);
+
+  // Let a scene recompute derived state (e.g. the door number from drift)
+  // before rules and endings are evaluated. Generic hook — scenes without it
+  // are unaffected.
+  if (typeof scene.recomputeDoor === "function") scene.recomputeDoor(state);
 
   // Legacy trigger/insert/amend flow. Only used by scenes that still
   // have scene.triggers defined; the new applies-based hotel scene
