@@ -264,11 +264,20 @@ export function renderScene(sceneId) {
     actCol.appendChild(el("div", { class: "reset-block" }, [
       el("button", {
         type: "button",
-        class: "reset-btn",
-        title: "清除本關進度,從頭開始",
+        class: "home-btn",
+        title: "回到場所選單，本關進度會保留",
         onclick: (ev) => {
           ev.preventDefault();
-          if (confirm("確定要重置本關嗎?目前的進度會全部消失。")) {
+          location.hash = "";
+        },
+      }, "回到首頁"),
+      el("button", {
+        type: "button",
+        class: "reset-btn",
+        title: "清除本關進度，從頭開始",
+        onclick: (ev) => {
+          ev.preventDefault();
+          if (confirm("確定要重置本關嗎？目前的進度會全部消失。")) {
             clearState(sceneId);
             location.hash = "";
             location.reload();
@@ -341,8 +350,8 @@ export function renderIndex() {
     pick.appendChild(el("a", { href: "#" + s.id, onclick: (ev) => {
       ev.preventDefault(); location.hash = s.id;
     } }, [
-      el("span", { class: "name" }, s.title),
-      el("span", { class: "blurb" }, s.blurb || ""),
+      el("h2", { class: "name" }, s.title),
+      el("p", { class: "blurb" }, s.blurb || ""),
     ]));
   }
   card.appendChild(pick);
