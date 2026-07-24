@@ -1,5 +1,5 @@
 /* Rule Horror — 監視器 / 終端機 / 老舊告示混搭。
-   不是書本排版,是要不安感。
+   不是書本排版，是要不安感。
    配色: 漆黑底 + 磷光文字 + 紅色警戒。
    字體: 等寬打字機 + 繁中宋體 fallback。 */
 
@@ -197,15 +197,15 @@ li.amended::after {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  /* 右內距 > 捲軸寬,加上 scrollbar-gutter 預留溝槽,讓捲軸永遠不會壓到
+  /* 右內距 > 捲軸寬，加上 scrollbar-gutter 預留溝槽，讓捲軸永遠不會壓到
      內容(尤其結局那個有邊框的框)。 */
   padding: 6px 14px 8px 0;
-  /* 高度封頂:超出就欄內捲動,不再把整欄往下撐。renderScene 每次會把
-     stream 捲到底,所以最新一段永遠在視野裡。 */
+  /* 高度封頂：超出就欄內捲動，不再把整欄往下撐。renderScene 每次會把
+     stream 捲到底，所以最新一段永遠在視野裡。 */
   max-height: 60vh;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  /* Firefox:細捲軸(否則是系統寬版,webkit 那組對它無效)。 */
+  /* Firefox:細捲軸(否則是系統寬版，webkit 那組對它無效)。 */
   scrollbar-width: thin;
   scrollbar-color: var(--accent) transparent;
 }
@@ -537,7 +537,7 @@ pre {
   .col-actions { order: 3; }
   .monitor::before, .monitor::after { font-size: 9px; }
   #app { padding: 8px; }
-  /* 單欄堆疊時敘事欄矮一點,免得把行動欄推到一長串捲動之外。 */
+  /* 單欄堆疊時敘事欄矮一點，免得把行動欄推到一長串捲動之外。 */
   .narrative-stream { max-height: 42vh; }
 }
 @media (max-width: 600px) {
