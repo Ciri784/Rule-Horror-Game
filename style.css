@@ -427,15 +427,19 @@ li.amended::after {
 /* ============== 結局 ============== */
 .scene-end { text-align: center; margin-top: 20px; }
 .scene-end .stamp {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   border: 2px solid var(--accent);
   color: var(--accent);
   padding: 10px 22px;
   font-family: "Courier New", ui-monospace, monospace;
   font-size: 16px;
   letter-spacing: 0.3em;
+  /* letter-spacing puts its gap after the last glyph; nudge the text right
+     by the same amount so it reads centered inside the box */
+  text-indent: 0.3em;
   transform: rotate(-2deg);
-  margin-bottom: 18px;
+  margin: 0 auto 18px auto;
   font-weight: bold;
   text-shadow: 0 0 6px rgba(210,74,74,0.5);
   background: rgba(210,74,74,0.05);

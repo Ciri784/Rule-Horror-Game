@@ -78,20 +78,21 @@ export function freshState(scene, now = Date.now()) {
   };
 }
 
-// Compute which rules from `scene.rules` currently apply to the player.
-// A rule applies if:
-//   1. The player has unlocked it (id is in state.unlockedRuleIds), AND
-//   2. The rule's applies(state) predicate returns true (or is missing).
+// Compute which rules the player currently *holds*. A rule shows if the
+// player has unlocked it (its id is in state.unlockedRuleIds) — nothing
+// more. Whether a held rule is "in effect" right now is deliberately NOT
+// computed here: in rule-horror the player judges that themselves. Showing
+// only the "active" rules would do the thinking for them and kill the whole
+// point. (Rules carry an `applies` predicate for authoring reference, but it
+// must never gate display.)
 //
-// Rules are returned in the order the scene declared them, so the
-// "current rules" list feels like a fixed wall of text that grows as
-// you explore.
+// Rules are returned in the order the scene declared them, so a collected
+// rulebook stays a fixed wall of text that only ever grows as you explore.
 export function rulesFor(scene, state) {
   if (!scene.rules) return [];
   const out = [];
   for (const [id, rule] of Object.entries(scene.rules)) {
     if (!state.unlockedRuleIds.includes(id)) continue;
-    if (typeof rule.applies === "function" && !rule.applies(state)) continue;
     out.push({ id, ...rule });
   }
   return out;
