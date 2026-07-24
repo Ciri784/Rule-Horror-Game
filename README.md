@@ -25,7 +25,7 @@ Just open `index.html` in a browser. No build step, no server.
 ## Deploy
 
 GitHub Pages is wired up via `.github/workflows/pages.yml`. Pushing to `main`
-will deploy the site root to `https://<owner>.github.io/Rule-Horror-Game/`.
+will deploy the site root to `https://<owner>.github.io/rule-horror-game/`.
 
 ## Author
 

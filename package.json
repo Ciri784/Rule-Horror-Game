@@ -11,16 +11,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ciri784/Rule-Horror-Game.git"
+    "url": "git+https://github.com/Ciri784/rule-horror-game.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/Ciri784/Rule-Horror-Game/issues"
+    "url": "https://github.com/Ciri784/rule-horror-game/issues"
   },
-  "homepage": "https://github.com/Ciri784/Rule-Horror-Game#readme",
+  "homepage": "https://github.com/Ciri784/rule-horror-game#readme",
   "devDependencies": {
     "vitest": "^4.1.10"
   }
