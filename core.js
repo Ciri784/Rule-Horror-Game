@@ -156,39 +156,38 @@ export function renderScene(sceneId) {
     saveState(sceneId, state);
   }
 
-  // --- Idle time progression ---
-  // Real time advances whether the player is clicking or not. We compute
-  // the elapsed ms since the last render and convert that to game minutes
-  // (5 real seconds = 1 in-game minute, so 1 real minute = 12 minutes).
-  // This is the single thing that makes the scene actually playable: the
-  // player can sit and watch the rules change, or read a slow trigger, or
-  // just think — and the world keeps moving.
-  if (state.startedAt) {
+  const ctx = { scene, visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
+
+  // Which rulebooks the player has expanded. Lives here (view state, not game
+  // state) so it survives every rerender() but resets on a fresh scene load.
+  const openBooks = new Set();
+
+  // --- Idle time catch-up ---
+  // Time also advances with real time between renders (5 real seconds = 1
+  // in-game minute), so returning to the scene fast-forwards the clock. Only
+  // while the run is live: once it has ended, the clock stops — no more ticks,
+  // no more narration, no re-save (fixes: time kept counting after an ending).
+  if (state.startedAt && !state.ended) {
     const now = Date.now();
     const lastTick = state._lastTickAt || state.startedAt;
     const elapsedMs = now - lastTick;
     if (elapsedMs >= 5000) {
       const tickMinutes = Math.floor(elapsedMs / 5000);
       const before = state.time;
-      // wraparound detection — same trick the engine uses for `time`
-      // arithmetic, mirrored here so trigger conditions that key off
-      // crossedMidnight work the same way for idle ticks.
       const DAY = 24 * 60;
       state.time = (state.time + tickMinutes) % DAY;
       if (state.time < before) state.crossedMidnight = true;
-      // Mark the tick in the narrative stream so the player can see the
-      // world actually moved while they weren't pressing buttons.
       narrate(state, `（時間過去了。房間的時鐘指向 ${formatTime(state.time)}。）`, "system");
       state._lastTickAt = now;
+      // A catch-up can cross midnight or reach dawn, so re-run derived state
+      // and endings here too — otherwise a time-based ending (e.g. 天亮退房)
+      // would wait for the next click, and overshooting its window would lose
+      // it entirely.
+      evaluateTriggers(scene, state);
+      checkEndings(scene, state, ctx);
       saveState(sceneId, state);
     }
   }
-
-  const ctx = { scene, visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
-
-  // Which rulebooks the player has expanded. Lives here (view state, not game
-  // state) so it survives every rerender() but resets on a fresh scene load.
-  const openBooks = new Set();
 
   function rerender() {
     appRoot().innerHTML = "";
