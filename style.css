@@ -197,12 +197,19 @@ li.amended::after {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 6px 8px 8px 0;
+  /* 右內距 > 捲軸寬,加上 scrollbar-gutter 預留溝槽,讓捲軸永遠不會壓到
+     內容(尤其結局那個有邊框的框)。 */
+  padding: 6px 14px 8px 0;
   /* 高度封頂:超出就欄內捲動,不再把整欄往下撐。renderScene 每次會把
      stream 捲到底,所以最新一段永遠在視野裡。 */
   max-height: 60vh;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  /* Firefox:細捲軸(否則是系統寬版,webkit 那組對它無效)。 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
 }
+/* Chrome / Edge / Safari 的細捲軸樣式。 */
 .narrative-stream::-webkit-scrollbar { width: 6px; }
 .narrative-stream::-webkit-scrollbar-track { background: transparent; }
 .narrative-stream::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
