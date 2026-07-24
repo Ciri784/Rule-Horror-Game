@@ -197,10 +197,15 @@ li.amended::after {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 6px 4px 8px 0;
+  padding: 6px 8px 8px 0;
+  /* 高度封頂:超出就欄內捲動,不再把整欄往下撐。renderScene 每次會把
+     stream 捲到底,所以最新一段永遠在視野裡。 */
+  max-height: 60vh;
+  overflow-y: auto;
 }
 .narrative-stream::-webkit-scrollbar { width: 6px; }
-.narrative-stream::-webkit-scrollbar-thumb { background: var(--accent); }
+.narrative-stream::-webkit-scrollbar-track { background: transparent; }
+.narrative-stream::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
 
 .narr-row {
   display: grid;
@@ -525,6 +530,8 @@ pre {
   .col-actions { order: 3; }
   .monitor::before, .monitor::after { font-size: 9px; }
   #app { padding: 8px; }
+  /* 單欄堆疊時敘事欄矮一點,免得把行動欄推到一長串捲動之外。 */
+  .narrative-stream { max-height: 42vh; }
 }
 @media (max-width: 600px) {
   body { font-size: 14px; }

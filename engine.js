@@ -163,16 +163,14 @@ export function moveTo(scene, state, locationId, label) {
 
 // Unlock a rule for the player. Rules are content-addressed by id; once
 // unlocked they stay in state.unlockedRuleIds for the rest of the run.
-export function unlockRule(ruleId, state, ctx) {
+// Unlock a rule for the player. Silent by design: the newly-collected
+// rulebook already shows up in the rules panel, so dumping each rule's text
+// into the narrative stream is redundant noise. The signal that a rulebook
+// was gained is the item pickup ("你撿到了員工守則"), not a per-rule line.
+// A scene that wants to announce an unlock can narrate in its own action.
+export function unlockRule(ruleId, state) {
   if (state.unlockedRuleIds.includes(ruleId)) return false;
   state.unlockedRuleIds.push(ruleId);
-  const scene = ctx && ctx.scene;
-  const rule = scene && scene.rules && scene.rules[ruleId];
-  if (rule) {
-    const text = `你學到了一條守則：「${rule.text}」`;
-    if (ctx && ctx.narrate) ctx.narrate(text, "rule-unlocked");
-    else narrate(state, text, "rule-unlocked");
-  }
   return true;
 }
 

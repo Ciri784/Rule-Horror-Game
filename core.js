@@ -66,10 +66,15 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-function renderRules(scene, state) {
+function renderRules(scene, state, openBooks) {
   // Each rulebook is a <details> dropdown. The player collects rulebooks by
   // holding the matching items; each is collapsed until opened. Multiple
   // rulebooks coexist so the player can compare contradictory rules.
+  //
+  // `openBooks` is a Set (owned by renderScene) of book names the player has
+  // expanded. rerender() rebuilds the DOM from scratch on every action, so
+  // without this the <details> would snap shut each turn — we reapply the
+  // open state here and keep the Set in sync via the toggle event.
   const list = rulesFor(scene, state);
 
   if (scene.rulebooks) {
@@ -87,7 +92,15 @@ function renderRules(scene, state) {
       if (!rules || rules.length === 0) continue;
       // 計算這份守則單有幾條條件還沒過的 (顯示為「待解鎖」)
       const lockedHint = rules.length === 0 ? "" : `（${rules.length} 條）`;
-      const details = el("details", { class: "rulebook" });
+      const props = {
+        class: "rulebook",
+        ontoggle: (ev) => {
+          if (ev.target.open) openBooks.add(bookName);
+          else openBooks.delete(bookName);
+        },
+      };
+      if (openBooks && openBooks.has(bookName)) props.open = "";
+      const details = el("details", props);
       const summary = el("summary", { class: "rulebook-summary" }, [
         el("span", { class: "rulebook-title" }, bookName),
         el("span", { class: "rulebook-count" }, lockedHint),
@@ -173,6 +186,10 @@ export function renderScene(sceneId) {
 
   const ctx = { scene, visitCount: state.visitCount, fresh, narrate: (text, kind) => narrate(state, text, kind) };
 
+  // Which rulebooks the player has expanded. Lives here (view state, not game
+  // state) so it survives every rerender() but resets on a fresh scene load.
+  const openBooks = new Set();
+
   function rerender() {
     appRoot().innerHTML = "";
 
@@ -183,7 +200,7 @@ export function renderScene(sceneId) {
       rulesCol.appendChild(el("p", { class: "col-sub" },
         label(scene, "visitLabel", state.visitCount)));
     }
-    rulesCol.appendChild(renderRules(scene, state));
+    rulesCol.appendChild(renderRules(scene, state, openBooks));
 
     // 敘事欄 (center)
     const narrCol = el("section", { class: "col col-narrative" });
