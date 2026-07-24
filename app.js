@@ -1,8 +1,8 @@
-// App entry. Registers scenes, then starts the router.
+// App entry: register every scene from the registry, then start the router.
 
 import { registerScene, start } from "./core.js";
-import { hotel } from "./scenes/hotel.js";
+import { scenes } from "./scenes/index.js";
 
-registerScene(hotel);
+scenes.forEach(registerScene);
 
 start();

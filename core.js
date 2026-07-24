@@ -1,18 +1,18 @@
-// Rule Horror — core engine
-// State machine: scenes drive behavior; this file owns rendering, storage,
-// and the "rules mutate in the middle of the list" trick.
+// Rule Horror — core (browser layer): DOM rendering, routing, storage.
+// The generic state machine lives in engine.js; scenes drive behaviour.
 //
-// Scene contract:
+// Scene contract (full spec + minimal skeleton: docs/scene-contract.md):
 //   {
-//     id, title, blurb, intro,
-//     openingNarrative: string,                       // first beat in the narrative stream
-//     initialRules: [string, ...],
+//     id, title, blurb, openingNarrative,
+//     initialItems?, initialLocation?, initialIdentity?, initialTime?,
+//     initialUnlockedRuleIds?, initialState?,      // scene-private fields
+//     rules, rulebooks, judges?, derive?,
 //     actions(state, ctx) -> [{ id, label, onChoose(state, ctx) }, ...],
-//     triggers: [{ id, when(state, ctx) -> bool, body, mode: "insert"|"amend", target? }],
-//     endings: [{ id, label, when(state, ctx) -> bool, text }]
+//     endings: [{ id, label, when(state, ctx) -> bool, text }],
+//     ui?: { visitLabel?(n), restart?, rulesTitle?, nowTitle?, actionsTitle?,
+//            reset?, home?, emptyRules? },
 //   }
-//   onChoose may call ctx.narrate(text, kind?) to push a narration entry
-//   into the current state's narrative stream.
+//   onChoose may call ctx.narrate(text, kind?) to push a narration entry.
 
 import {
   loadState, saveState, clearState,
@@ -34,6 +34,23 @@ export function registerScene(scene) { scenes[scene.id] = scene; }
 export function getScene(id) { return scenes[id]; }
 export function listScenes() { return Object.values(scenes); }
 
+// Generic UI labels. A scene may override any of these via `scene.ui`;
+// place-specific wording (a hotel's 入住/退房) lives there, not here.
+const UI_DEFAULTS = {
+  rulesTitle: "已知規則",
+  nowTitle: "此刻",
+  actionsTitle: "您可以",
+  reset: "重置本關",
+  home: "回到首頁",
+  restart: "重新開始",
+  emptyRules: "您目前還沒有拿到任何守則。",
+  visitLabel: (n) => `第 ${n} 次`,
+};
+function label(scene, key, ...args) {
+  const v = (scene.ui && scene.ui[key] != null) ? scene.ui[key] : UI_DEFAULTS[key];
+  return typeof v === "function" ? v(...args) : v;
+}
+
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -50,14 +67,10 @@ function el(tag, props = {}, children = []) {
 }
 
 function renderRules(scene, state) {
-  // Stage B with rulebooks: each rulebook = a <details> dropdown.
-  // Player collects rulebooks by holding the corresponding items; each
-  // rulebook is collapsed by default and only expands when the player
-  // chooses to read it. Multiple rulebooks can coexist in the panel
-  // so the player can compare contradictory rules across identities.
-  const list = (scene.rules || scene.initialRules)
-    ? rulesFor(scene, state)
-    : state.rules.map((r, i) => ({ id: "L" + i, subject: "", text: r.text, book: "" }));
+  // Each rulebook is a <details> dropdown. The player collects rulebooks by
+  // holding the matching items; each is collapsed until opened. Multiple
+  // rulebooks coexist so the player can compare contradictory rules.
+  const list = rulesFor(scene, state);
 
   if (scene.rulebooks) {
     // 把 rule 依 book 分群
@@ -91,17 +104,16 @@ function renderRules(scene, state) {
       wrap.appendChild(details);
     }
     if (!wrap.children.length) {
-      wrap.appendChild(el("p", { class: "rules-empty" }, "您目前還沒有拿到任何守則。"));
+      wrap.appendChild(el("p", { class: "rules-empty" }, label(scene, "emptyRules")));
     }
     return wrap;
   }
 
-  // Legacy scene: 單一 ol
+  // Scene without rulebooks: render its unlocked rules as one flat list.
   const ol = el("ol", { class: "rules" });
   list.forEach((rule, i) => {
     ol.appendChild(el("li", { class: "rule" }, [
       el("span", { class: "rule-num" }, `第 ${i + 1} 條`),
-      el("span", { class: "rule-subject" }, rule.subject ? `${rule.subject}：` : ""),
       el("span", { class: "rule-body" }, rule.text),
     ]));
   });
@@ -119,53 +131,16 @@ export function renderScene(sceneId) {
     return;
   }
 
+  // Saves are versioned (see STORAGE_PREFIX); a load either returns a
+  // current-shape state or null, so no in-place migration is needed.
   let state = loadState(sceneId);
   const fresh = !state;
   if (fresh) {
     const visitCount = (loadState(sceneId + ":visits") || 0) + 1;
-    // Use engine.freshState so the scene can opt in to either the legacy
-    // initialRules+triggers flow or the new applies-based rules system
-    // (initialItems / initialHotelView / initialLocation / initialUnlockedRuleIds).
     state = freshState(scene);
-    state.startedAt = Date.now();
     state.visitCount = visitCount;
-    state.time = scene.initialTime != null ? scene.initialTime : (state.time || 23 * 60);
-    // openingNarrative is layered on top if the scene supplies it and the
-    // fresh state didn't already include one
-    if (scene.openingNarrative && (!Array.isArray(state.narrative) || state.narrative.length === 0)) {
-      state.narrative = [{ time: state.time, kind: "narration", text: scene.openingNarrative }];
-    }
     saveState(sceneId + ":visits", visitCount);
     saveState(sceneId, state);
-  } else {
-    // Migration: older saved states were created before actions existed.
-    // Without this, the first onChoose call throws "Cannot read
-    // properties of undefined (reading 'lookDoor')" because the saved
-    // object literally has no .actions field. Patch in place and persist
-    // so we don't have to do this on every render.
-    if (!state.actions || typeof state.actions !== "object") {
-      state.actions = {};
-      saveState(sceneId, state);
-    }
-    if (!Array.isArray(state.narrative)) {
-      // Older saved states (pre 0a57dd0) don't have the narrative log;
-      // backfill it with the scene's openingNarrative so the new UI
-      // doesn't throw on `for (const entry of state.narrative)`.
-      state.narrative = scene.openingNarrative
-        ? [{ time: state.time || 23 * 60, kind: "narration", text: scene.openingNarrative }]
-        : [];
-      saveState(sceneId, state);
-    }
-    // New Stage B scenes: heldItems / hotelView / location / unlockedRuleIds
-    if (scene.rules) {
-      if (!Array.isArray(state.heldItems)) state.heldItems = scene.initialItems ? [...scene.initialItems] : [];
-      if (typeof state.hotelView !== "string") state.hotelView = scene.initialHotelView || "unknown";
-      if (typeof state.location !== "string") state.location = scene.initialLocation || "my-room";
-      if (!Array.isArray(state.unlockedRuleIds)) state.unlockedRuleIds = scene.initialUnlockedRuleIds ? [...scene.initialUnlockedRuleIds] : [];
-      if (typeof state.doorNumber === "undefined") state.doorNumber = scene.initialDoorNumber || null;
-      if (typeof state.drift !== "number") state.drift = 0;
-      saveState(sceneId, state);
-    }
   }
 
   // --- Idle time progression ---
@@ -203,27 +178,27 @@ export function renderScene(sceneId) {
 
     // 規則欄 (left on desktop, top on mobile)
     const rulesCol = el("aside", { class: "col col-rules" });
-    rulesCol.appendChild(el("h2", { class: "col-title" }, "已知規則"));
+    rulesCol.appendChild(el("h2", { class: "col-title" }, label(scene, "rulesTitle")));
     if (state.visitCount > 1) {
       rulesCol.appendChild(el("p", { class: "col-sub" },
-        `第 ${state.visitCount} 次入住`));
+        label(scene, "visitLabel", state.visitCount)));
     }
     rulesCol.appendChild(renderRules(scene, state));
 
     // 敘事欄 (center)
     const narrCol = el("section", { class: "col col-narrative" });
-    narrCol.appendChild(el("h2", { class: "col-title" }, "此刻"));
+    narrCol.appendChild(el("h2", { class: "col-title" }, label(scene, "nowTitle")));
     const streamEl = el("div", { class: "narrative-stream", id: "narrative-stream" });
     narrCol.appendChild(streamEl);
     // 行動欄 (right on desktop, bottom on mobile)
     const actCol = el("aside", { class: "col col-actions" });
-    actCol.appendChild(el("h2", { class: "col-title" }, "您可以"));
+    actCol.appendChild(el("h2", { class: "col-title" }, label(scene, "actionsTitle")));
     const ending = state.ended ? scene.endings.find((e) => e.id === state.ended) : null;
     if (ending) {
       actCol.appendChild(el("div", { class: "scene-end" }, [
         el("div", { class: "stamp" }, ending.label),
         el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); restart(); } },
-          el("button", { class: "restart" }, "重新入住")),
+          el("button", { class: "restart" }, label(scene, "restart"))),
       ]));
     } else {
       const actions = scene.actions(state, ctx);
@@ -238,9 +213,6 @@ export function renderScene(sceneId) {
               ev.preventDefault();
               if (state.ended) return;
               try {
-                if (!state.actions || typeof state.actions !== "object") {
-                  state.actions = {};
-                }
                 applyAction(scene, state, a.id, ctx);
                 saveState(sceneId, state);
               } catch (err) {
@@ -270,7 +242,7 @@ export function renderScene(sceneId) {
           ev.preventDefault();
           location.hash = "";
         },
-      }, "回到首頁"),
+      }, label(scene, "home")),
       el("button", {
         type: "button",
         class: "reset-btn",
@@ -283,7 +255,7 @@ export function renderScene(sceneId) {
             location.reload();
           }
         },
-      }, "重置本關"),
+      }, label(scene, "reset")),
     ]));
 
     // Append the grid BEFORE calling renderNarrativeStream so the

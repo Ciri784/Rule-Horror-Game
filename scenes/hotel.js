@@ -106,17 +106,17 @@ const RULES = {
          text: "房間已經認得你。別急著糾正它——反正你也快想不起 602 長什麼樣了。" },
 };
 
-// 飯店判斷準則 — 第一個 when 通過的 view 勝出。
+// 身份判定 — 第一個 when 通過的 identity 勝出。
 // 房客待在自己房間才是「房客」;離開就成 intruder。員工證入夜即過期。
-const HOTEL_JUDGES = [
-  { when: (s) => has(s, "staff-card") && s.time >= 18 * 60 && s.time < 22 * 60, view: "staff" },
-  { when: (s) => has(s, "staff-card"), view: "intruder" },
-  { when: (s) => has(s, "guest-card") && s.location === "my-room", view: "guest" },
-  { when: (s) => has(s, "guest-card"), view: "intruder" },
+const JUDGES = [
+  { when: (s) => has(s, "staff-card") && s.time >= 18 * 60 && s.time < 22 * 60, identity: "staff" },
+  { when: (s) => has(s, "staff-card"), identity: "intruder" },
+  { when: (s) => has(s, "guest-card") && s.location === "my-room", identity: "guest" },
+  { when: (s) => has(s, "guest-card"), identity: "intruder" },
 ];
 
-// 門牌重算:偏移夠高,你的門就變成 704(不可逆——房間已經是那層樓的了)。
-function recomputeDoor(s) {
+// 衍生狀態:偏移夠高,你的門就變成 704(不可逆——房間已經是那層樓的了)。
+function derive(s) {
   if (s.drift >= DRIFT_FLIP) s.doorNumber = HIDDEN_NUMBER;
   else if (s.doorNumber == null) s.doorNumber = CARD_NUMBER;
 }
@@ -322,12 +322,12 @@ const ENDINGS = [
   // 被櫃台收走 — 身份不符(離開房間 / 員工證過期)撐過午夜。
   { id: "claimed-by-clerk", label: "被櫃台收走",
     text: "走廊盡頭，夜班櫃台的人早就站在那裡等你。你不記得自己是怎麼走出房間的——只記得有一本守則叫你出來巡邏，而你信了。他伸手，像在幫你辦一場你沒預約的入住。",
-    when: (s) => s.hotelView === "intruder" && s.crossedMidnight === true },
+    when: (s) => s.identity === "intruder" && s.crossedMidnight === true },
   // 天亮退房(好結局)— 撐到早上,門牌始終 602,你仍是房客、仍在自己房間。
   { id: "checked-out", label: "天亮退房",
     text: "六點，天色泛白。門牌從頭到尾都是 602——你沒信那條假的。你把房卡放回櫃台，沒有人接。走出旋轉門時你回頭看了一眼：面板上仍然沒有 4 樓，好像它從來不需要你。",
     when: (s) => s.crossedMidnight === true && s.time >= 6 * 60 && s.time < 12 * 60
-              && s.doorNumber === CARD_NUMBER && s.hotelView === "guest" && s.location === "my-room" },
+              && s.doorNumber === CARD_NUMBER && s.identity === "guest" && s.location === "my-room" },
 ];
 
 export const hotel = {
@@ -338,16 +338,23 @@ export const hotel = {
   openingNarrative: "夜裡十一點，你走進 602 號房，把行李放上床。電梯面板上沒有 4 樓，你沒多想。\n櫃台遞房卡時塞了一張紙條：「房客守則，入住前請過目。撐到早上六點，照房卡退房就好。」",
   initialItems: ["guest-card"],
   initialUnlockedRuleIds: ["rg1", "rg2", "rg3", "rg4", "rg5", "rg6"],
-  initialHotelView: "guest",
+  initialIdentity: "guest",
   initialLocation: "my-room",
   initialTime: 23 * 60,
-  initialDoorNumber: CARD_NUMBER,
+  // 場所私有狀態:門牌 / 偏移計數 / 電視旗標。引擎不認識這些,只有 derive
+  // 與 actions 讀寫它們。
+  initialState: { doorNumber: CARD_NUMBER, drift: 0, tvOn7: false, tvOff: false, _blackout: false },
   rules: RULES,
   rulebooks: RULEBOOKS,
-  hotelJudges: HOTEL_JUDGES,
-  recomputeDoor,
+  judges: JUDGES,
+  derive,
   actions,
   endings: ENDINGS,
+  // hotel 味的 UI 字串(入住/退房語境)。通用欄位(已知規則/此刻…)用 core 預設。
+  ui: {
+    visitLabel: (n) => `第 ${n} 次入住`,
+    restart: "重新入住",
+  },
 };
 
 export default hotel;

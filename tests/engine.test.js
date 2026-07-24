@@ -25,7 +25,7 @@ describe("fresh state", () => {
   it("starts in room 602 as a guest holding only the house rulebook", () => {
     const { state } = boot();
     expect(state.heldItems).toEqual(["guest-card"]);
-    expect(state.hotelView).toBe("guest");
+    expect(state.identity).toBe("guest");
     expect(state.location).toBe("my-room");
     expect(state.doorNumber).toBe("602");
     expect(state.drift).toBe(0);
@@ -64,27 +64,27 @@ describe("hotel judges — identity", () => {
     const { state } = boot();
     state.time = 22 * 60;
     evaluateTriggers(hotel, state, silent);
-    expect(state.hotelView).toBe("guest");
+    expect(state.identity).toBe("guest");
   });
   it("guest-card outside my-room → intruder", () => {
     const { state } = boot();
     state.location = "lobby";
     evaluateTriggers(hotel, state, silent);
-    expect(state.hotelView).toBe("intruder");
+    expect(state.identity).toBe("intruder");
   });
   it("expired staff-card at 23:00 → intruder", () => {
     const { state } = boot();
     pickUp("staff-card", state, hotel);
     state.time = 23 * 60;
     evaluateTriggers(hotel, state, silent);
-    expect(state.hotelView).toBe("intruder");
+    expect(state.identity).toBe("intruder");
   });
   it("valid staff-card at 20:00 → staff", () => {
     const { state } = boot();
     pickUp("staff-card", state, hotel);
     state.time = 20 * 60;
     evaluateTriggers(hotel, state, silent);
-    expect(state.hotelView).toBe("staff");
+    expect(state.identity).toBe("staff");
   });
 });
 
@@ -98,7 +98,7 @@ describe("endings", () => {
   });
   it("claimed-by-clerk fires for an intruder past midnight", () => {
     const { state } = boot();
-    state.hotelView = "intruder";
+    state.identity = "intruder";
     state.crossedMidnight = true;
     state.time = 30;
     expect(checkEndings(hotel, state, silent).id).toBe("claimed-by-clerk");
